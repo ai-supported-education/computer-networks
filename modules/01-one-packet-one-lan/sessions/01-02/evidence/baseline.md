@@ -2,7 +2,8 @@
 
 ## Expected before action
 
-TODO: UTC timestamp записи и прогноз до `pnpm network:lab up 01-02`.
+TODO: ISO 8601 UTC timestamp `YYYY-MM-DDTHH:mm:ss.sssZ`, полученный до
+`pnpm network:lab up 01-02`, и прогноз.
 
 ## Initial state and preflight
 
@@ -13,7 +14,8 @@ TODO: ссылка на `.training/evidence/01-02/<run-id>/preflight.json`, effe
 
 ## Action start
 
-TODO: UTC timestamp из action event в `events.jsonl` и точная команда.
+TODO: значение `at` из записи `phase="up"`, `kind="action"` в `events.jsonl` и
+точная команда. Формат timestamp: `YYYY-MM-DDTHH:mm:ss.sssZ`.
 
 ## Raw evidence reference
 
@@ -38,3 +40,8 @@ output.
 ## Inference and unknowns
 
 TODO: ограниченный вывод и то, чего baseline не доказывает.
+
+## Failed attempts
+
+None. Если попытки были, замените `None` списком bare run ids и кратких причин;
+canonical raw paths выше оставьте только для одного успешного run.

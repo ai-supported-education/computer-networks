@@ -10,8 +10,9 @@ structurally complete artifact проходит.
 
 До появления Markdown runner сам fail-closed проверяет decoded live capture:
 cold ARP request → matching reply with advertised beta MAC → Echo Request →
-matching Echo Reply; warm neighbor mapping; Ethernet directions; frame/time/size
-bounds; Echo identity/sequence. Regression tests в
+matching Echo Reply; warm neighbor mapping и отсутствие target ARP перед первым
+Echo Request; Ethernet directions; frame/time/size bounds; Echo identity/sequence.
+ARP после warm Echo остаётся допустимым runtime событием. Regression tests в
 `packages/network-lab/test/lab.test.ts` отдельно отвергают incomplete capture,
-wrong advertised MAC и reply с другой Echo identity. Agent затем сверяет summary
-с local raw files и оценивает причинный inference.
+wrong advertised MAC, pre-Echo warm ARP и reply с другой Echo identity. Agent затем
+сверяет summary с local raw files и оценивает причинный inference.

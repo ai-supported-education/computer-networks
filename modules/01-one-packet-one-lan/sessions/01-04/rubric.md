@@ -10,7 +10,9 @@
   advertised ARP hardware address совпадает с beta inventory, Ethernet directions
   согласованы, observed Echo identifier/sequence связывают каждую reply с request.
 - Вывод о cache reuse опирается одновременно на neighbor state и capture; отсутствие
-  frame не объявляется абсолютным доказательством без проверки capture point.
+  target ARP перед первым warm Echo проверено как order invariant, а ARP после Echo
+  не подменяет уже наблюдавшийся warm path; отсутствие frame не объявляется
+  абсолютным доказательством без проверки capture point.
 - Variable fields (timestamps, identifiers, checksums/IP ID) не используются как
   фиксированный acceptance oracle.
 - Initial preflight и final raw post-check относятся к тому же run; preflight

@@ -79,6 +79,31 @@ describe("network evidence artifact contract", () => {
     expect(result, result.messages.join("\n")).toMatchObject({ ok: true });
   });
 
+  it("rejects mixed or misordered offline fixture evidence runs", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "network-evidence-"));
+
+    await writeFile(
+      path.join(root, "frame-map.md"),
+      completedFrameMap().replace("run-a/post-check.txt", "run-b/post-check.txt")
+    );
+    const mixed = await validateNetworkEvidence(root, "01-03");
+    expect(mixed.ok).toBe(false);
+    expect(mixed.messages.join("\n")).toContain("exact unique");
+
+    await writeFile(
+      path.join(root, "packet-path.md"),
+      completedPacketPath().replace(
+        "2026-08-23T00:00:00Z before inspect",
+        "2026-08-23T00:05:00Z before inspect"
+      )
+    );
+    const misordered = await validateNetworkEvidence(root, "01-06");
+    expect(misordered.ok).toBe(false);
+    expect(misordered.messages.join("\n")).toContain(
+      "Expected timestamp должен быть раньше"
+    );
+  });
+
 });
 
 function baseline(expected: string, runId = "run-a"): string {
@@ -132,20 +157,26 @@ All course-labelled resources are absent after cleanup.
 function completedFrameMap(): string {
   return `# Frame map
 
+## Expected before action
+Expected fixture identity and two bounded records were written at 2026-08-23T00:00:00Z before inspect.
+
+## Inspector action and raw evidence
+Action started at 2026-08-23T00:01:00Z. Raw files: .training/evidence/01-03/run-a/preflight.txt, .training/evidence/01-03/run-a/events.jsonl, .training/evidence/01-03/run-a/inspect.txt and .training/evidence/01-03/run-a/post-check.txt.
+
 ## Fixture identity
 Path fixtures/01-03/known-neighbour.pcap has observed SHA 8a4036d450c9f0953c50286f2dc99d429873900e8f92f22a1d2f8f6f1b6dc64f.
 
 ## Frame 1 observations
-Frame 1 contains observed Ethernet, IPv4 and ICMP fields from extraction.
+Frame 1 contains observed Ethernet, IPv4 and ICMP fields from raw inspect.txt.
 
 ## Frame 1 boundary arithmetic
-IPv4 total length is 60 bytes and the captured frame length is 74 bytes.
+IPv4 ip.len is 60 bytes; frame.cap_len is 74 bytes and equals frame.len for this record.
 
 ## Frame 2 observations
 Frame 2 contains the reverse observed address pairs and ICMP fields.
 
 ## Frame 2 boundary arithmetic
-This independent check also gives 60 bytes and 74 bytes for this fixture.
+This independent check gives ip.len 60 bytes and frame.cap_len 74 bytes; frame.len matches without truncation.
 
 ## Inference
 The ordered records are consistent with one bounded synthetic exchange.
@@ -155,7 +186,7 @@ The ordered records are consistent with one bounded synthetic exchange.
 - Traffic outside the capture remains unknown.
 
 ## Offline inspector cleanup
-exact_container_absent=true; final labelled status is clean.
+Cleanup completed at 2026-08-23T00:02:00Z; exact_container_absent=true; labelled containers=0, networks=0, volumes=0 and final status is clean.
 `;
 }
 
@@ -219,6 +250,11 @@ A bounded read-only observation is proposed without running another probe.
 `;
   return (
     "# Diagnosis\n\n" +
+    "## Expected before inspector actions\nExpected bounded offline parsing was recorded at 2026-08-23T00:00:00Z before all inspect actions.\n\n" +
+    "## Inspector run ledger\n" +
+    "- Case A action_at=2026-08-23T00:01:00Z cleanup_at=2026-08-23T00:01:10Z labelled=0/0/0 .training/evidence/01-05/run-a/preflight.txt .training/evidence/01-05/run-a/events.jsonl .training/evidence/01-05/run-a/inspect.txt .training/evidence/01-05/run-a/post-check.txt\n" +
+    "- Case B action_at=2026-08-23T00:02:00Z cleanup_at=2026-08-23T00:02:10Z labelled=0/0/0 .training/evidence/01-05/run-b/preflight.txt .training/evidence/01-05/run-b/events.jsonl .training/evidence/01-05/run-b/inspect.txt .training/evidence/01-05/run-b/post-check.txt\n" +
+    "- Case C action_at=2026-08-23T00:03:00Z cleanup_at=2026-08-23T00:03:10Z labelled=0/0/0 .training/evidence/01-05/run-c/preflight.txt .training/evidence/01-05/run-c/events.jsonl .training/evidence/01-05/run-c/inspect.txt .training/evidence/01-05/run-c/post-check.txt\n\n" +
     section(
       "Case A - interface-not-ready",
       "fixtures/01-05/interface-not-ready/"
@@ -232,6 +268,12 @@ A bounded read-only observation is proposed without running another probe.
 
 function completedPacketPath(): string {
   return `# Packet path
+
+## Expected before action
+Expected bounded synthetic evidence was recorded at 2026-08-23T00:00:00Z before inspect.
+
+## Inspector action and raw evidence
+Action started at 2026-08-23T00:01:00Z. Raw files: .training/evidence/01-06/run-a/preflight.txt, .training/evidence/01-06/run-a/events.jsonl, .training/evidence/01-06/run-a/inspect.txt and .training/evidence/01-06/run-a/post-check.txt.
 
 ## Fixture identity and provenance
 Verified fixtures/01-06/novel-local-exchange.pcap and fixtures/01-06/novel-local-exchange.baseline.txt against synthetic provenance and hash.
@@ -271,6 +313,6 @@ A missing reverse record with the same identifiers would contradict completeness
 The six records support only a bounded conclusion for this synthetic LAN.
 
 ## Cleanup status
-Offline inspection ended with exact_container_absent=true, containers: 0 and networks: 0.
+Cleanup ended at 2026-08-23T00:02:00Z with exact_container_absent=true, labelled_containers=0, labelled_networks=0 and labelled_volumes=0.
 `;
 }

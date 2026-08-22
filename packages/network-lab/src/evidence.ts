@@ -82,6 +82,8 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
     {
       relativePath: "frame-map.md",
       headings: [
+        /expected before action/i,
+        /inspector action and raw evidence/i,
         /fixture identity/i,
         /frame 1 observations/i,
         /frame 1 boundary arithmetic/i,
@@ -92,6 +94,11 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         /offline inspector cleanup/i
       ],
       references: [
+        ".training/evidence/01-03/",
+        "preflight.txt",
+        "events.jsonl",
+        "inspect.txt",
+        "post-check.txt",
         "fixtures/01-03/known-neighbour.pcap",
         "8a4036d450c9f0953c50286f2dc99d429873900e8f92f22a1d2f8f6f1b6dc64f"
       ],
@@ -103,6 +110,14 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         {
           description: "captured frame length с единицами",
           pattern: /\b74\s*(?:bytes?|байт(?:а|ов)?)\b/i
+        },
+        {
+          description: "IPv4 total-length field",
+          pattern: /ip\.len/i
+        },
+        {
+          description: "captured-length field",
+          pattern: /frame\.cap_len/i
         },
         { description: "frame 1 citation", pattern: /\bframe\s*(?:number\s*)?#?1\b/i },
         { description: "frame 2 citation", pattern: /\bframe\s*(?:number\s*)?#?2\b/i },
@@ -190,6 +205,8 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
     {
       relativePath: "diagnosis.md",
       headings: [
+        /expected before inspector actions/i,
+        /inspector run ledger/i,
         /case a.+interface-not-ready/i,
         /case b.+arp-no-reply/i,
         /case c.+icmp-no-reply/i,
@@ -197,6 +214,11 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         /offline inspector cleanup/i
       ],
       references: [
+        ".training/evidence/01-05/",
+        "preflight.txt",
+        "events.jsonl",
+        "inspect.txt",
+        "post-check.txt",
         "fixtures/01-05/interface-not-ready/",
         "fixtures/01-05/arp-no-reply/",
         "fixtures/01-05/icmp-no-reply/"
@@ -213,6 +235,8 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
     {
       relativePath: "packet-path.md",
       headings: [
+        /expected before action/i,
+        /inspector action and raw evidence/i,
         /fixture identity and provenance/i,
         /^source facts$/i,
         /^assumptions$/i,
@@ -226,6 +250,11 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         /cleanup status/i
       ],
       references: [
+        ".training/evidence/01-06/",
+        "preflight.txt",
+        "events.jsonl",
+        "inspect.txt",
+        "post-check.txt",
         "fixtures/01-06/novel-local-exchange.pcap",
         "fixtures/01-06/novel-local-exchange.baseline.txt"
       ],
@@ -239,6 +268,10 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         {
           description: "offline cleanup marker",
           pattern: /exact_container_absent\s*=\s*true/i
+        },
+        {
+          description: "нулевой labelled resource post-check",
+          pattern: /(?:labelled_)?containers?\s*[:=]\s*0[\s\S]{0,160}(?:labelled_)?networks?\s*[:=]\s*0[\s\S]{0,160}(?:labelled_)?volumes?\s*[:=]\s*0/i
         }
       ]
     }
@@ -327,8 +360,33 @@ export async function validateNetworkEvidence(
   if (sessionId === "01-02") {
     validateBaselineLifecycle(sources, failures);
   }
+  if (sessionId === "01-03") {
+    validateSingleFixtureLifecycle(
+      sources,
+      "01-03",
+      "frame-map.md",
+      failures
+    );
+  }
   if (sessionId === "01-04") {
     validateCaptureLifecycle(sources, failures);
+  }
+  if (sessionId === "01-05") {
+    validateMultipleFixtureLifecycles(
+      sources,
+      "01-05",
+      "diagnosis.md",
+      3,
+      failures
+    );
+  }
+  if (sessionId === "01-06") {
+    validateSingleFixtureLifecycle(
+      sources,
+      "01-06",
+      "packet-path.md",
+      failures
+    );
   }
 
   if (failures.length > 0) {
@@ -422,6 +480,135 @@ function validateCaptureLifecycle(
   const hashes = comparison.match(/\b[a-f0-9]{64}\b/gi) ?? [];
   if (hashes.length < 2) {
     failures.push("evidence/comparison.md: нужны observed SHA-256 для cold и warm pcap.");
+  }
+}
+
+function validateSingleFixtureLifecycle(
+  sources: ReadonlyMap<string, string>,
+  sessionId: string,
+  relativePath: string,
+  failures: string[]
+): void {
+  const source = sources.get(relativePath);
+  if (!source) return;
+  const sections = parseSections(source);
+  const expectedAt = timestampInSection(sections, /expected before action/i);
+  const actionAt = timestampInSection(
+    sections,
+    /inspector action and raw evidence/i
+  );
+  const cleanupAt = timestampInSection(
+    sections,
+    /offline inspector cleanup|cleanup status/i
+  );
+  if (!expectedAt) {
+    failures.push(`${relativePath}: Expected section не содержит ISO UTC timestamp.`);
+  }
+  if (!actionAt) {
+    failures.push(`${relativePath}: inspector action не содержит ISO UTC timestamp.`);
+  }
+  if (!cleanupAt) {
+    failures.push(`${relativePath}: cleanup section не содержит ISO UTC timestamp.`);
+  }
+  if (expectedAt && actionAt && expectedAt >= actionAt) {
+    failures.push(`${relativePath}: Expected timestamp должен быть раньше inspector action.`);
+  }
+  if (actionAt && cleanupAt && actionAt >= cleanupAt) {
+    failures.push(`${relativePath}: cleanup timestamp должен быть позже inspector action.`);
+  }
+
+  const runs = extractRunIds(source, sessionId);
+  if (runs.size !== 1) {
+    failures.push(`${relativePath}: нужен один exact unique ${sessionId} inspector run id.`);
+    return;
+  }
+  const [runId] = runs;
+  if (!runId) return;
+  for (const filename of [
+    "preflight.txt",
+    "events.jsonl",
+    "inspect.txt",
+    "post-check.txt"
+  ]) {
+    const reference = `.training/evidence/${sessionId}/${runId}/${filename}`;
+    if (!source.includes(reference)) {
+      failures.push(`${relativePath}: нет raw reference ${reference}.`);
+    }
+  }
+}
+
+function validateMultipleFixtureLifecycles(
+  sources: ReadonlyMap<string, string>,
+  sessionId: string,
+  relativePath: string,
+  expectedRunCount: number,
+  failures: string[]
+): void {
+  const source = sources.get(relativePath);
+  if (!source) return;
+  const sections = parseSections(source);
+  const expectedAt = timestampInSection(
+    sections,
+    /expected before inspector actions/i
+  );
+  if (!expectedAt) {
+    failures.push(`${relativePath}: Expected section не содержит ISO UTC timestamp.`);
+  }
+  const ledger = sections.find((section) =>
+    /inspector run ledger/i.test(section.heading)
+  )?.body ?? "";
+  const lifecycleRows = ledger
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /action_at\s*=/.test(line));
+  if (lifecycleRows.length !== expectedRunCount) {
+    failures.push(
+      `${relativePath}: inspector ledger должен содержать ${expectedRunCount} action_at/cleanup_at rows.`
+    );
+  }
+  const timestampPattern =
+    "(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z)";
+  const rowPattern = new RegExp(
+    `action_at\\s*=\\s*${timestampPattern}[\\s\\S]*cleanup_at\\s*=\\s*${timestampPattern}`,
+    "i"
+  );
+  for (const row of lifecycleRows) {
+    const match = rowPattern.exec(row);
+    const actionAt = match?.[1] ? Date.parse(match[1]) : Number.NaN;
+    const cleanupAt = match?.[2] ? Date.parse(match[2]) : Number.NaN;
+    if (!Number.isFinite(actionAt) || !Number.isFinite(cleanupAt)) {
+      failures.push(`${relativePath}: ledger row не содержит parseable action_at/cleanup_at.`);
+      continue;
+    }
+    if (expectedAt && expectedAt >= actionAt) {
+      failures.push(`${relativePath}: Expected timestamp должен быть раньше каждого inspector action.`);
+    }
+    if (actionAt >= cleanupAt) {
+      failures.push(`${relativePath}: cleanup_at должен быть позже action_at.`);
+    }
+    if (!/(?:labelled(?:_counts)?\s*=\s*)?0\s*\/\s*0\s*\/\s*0/i.test(row)) {
+      failures.push(`${relativePath}: каждый ledger row должен содержать labelled counts 0/0/0.`);
+    }
+  }
+
+  const runs = extractRunIds(source, sessionId);
+  if (runs.size !== expectedRunCount) {
+    failures.push(
+      `${relativePath}: нужны ${expectedRunCount} unique ${sessionId} inspector run ids.`
+    );
+  }
+  for (const runId of runs) {
+    for (const filename of [
+      "preflight.txt",
+      "events.jsonl",
+      "inspect.txt",
+      "post-check.txt"
+    ]) {
+      const reference = `.training/evidence/${sessionId}/${runId}/${filename}`;
+      if (!source.includes(reference)) {
+        failures.push(`${relativePath}: нет raw reference ${reference}.`);
+      }
+    }
   }
 }
 

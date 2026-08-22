@@ -27,20 +27,23 @@ S1 source interface is ready
  ↓
 S2 neighbor-before is observed as present or absent
  ├─ mapping present ───────────────────────────────┐
- └─ mapping absent → S3 ARP request → matching reply
-                                      ↓            │
-                            S4 mapping available ←─┘
-                                      ↓
-                     S5 ICMP Echo Request emitted
-                                      ↓
-              S6 matching ICMP Echo Reply observed
+ └─ mapping absent → S3a ARP Request observed
+                         ↓
+                    S3b matching ARP Reply observed
+                         ↓                         │
+                    S4 mapping available ←────────┘
+                         ↓
+       S5 Ethernet/IPv4/ICMP Echo Request observed
+                         ↓
+ S6 matching reverse Ethernet/IPv4/ICMP Reply observed
 ```
 
-Каждый переход имеет собственное evidence. S3 — только cold/cache-miss branch:
-при уже observed mapping warm path законно идёт от S2 прямо к S4. Если mapping
-absent и S3 не завершён matching reply, отсутствие ICMP Request ожидаемо и ещё не
+Каждый переход имеет собственное evidence. S3a/S3b — только cold/cache-miss
+branch: при уже observed mapping warm path законно идёт от S2 прямо к S4. Если
+mapping absent и после S3a нет S3b, отсутствие ICMP Request ожидаемо и ещё не
 проверяет ICMP handling. Если S5 достигнут, ARP уже не является самой ранней
-границей данного run.
+границей данного run. S5/S6 требуют назвать вложенные Ethernet, IPv4 и ICMP
+evidence, а не только слово `ping`.
 
 «Нет frame в capture» считается evidence только когда bundle подтверждает capture
 point, interval/filter и requested action. Иначе отсутствие могло возникнуть из-за
@@ -97,7 +100,7 @@ unknown.
 
 | Case | Directory | Наблюдаемый симптом |
 | --- | --- | --- |
-| A | `fixtures/01-05/interface-not-ready/` | requested action есть, relevant frames не emitted |
+| A | `fixtures/01-05/interface-not-ready/` | requested action есть, relevant frames не наблюдались; baseline показывает `eth0 DOWN` |
 | B | `fixtures/01-05/arp-no-reply/` | repeated ARP requests, matching reply отсутствует |
 | C | `fixtures/01-05/icmp-no-reply/` | ARP exchange завершён, Echo Request есть, matching Reply отсутствует |
 
@@ -120,7 +123,12 @@ unknown.
 1. Выполните `pnpm network:fixture preflight`. Продолжайте только после PASS для
    local `unix://` endpoint и pinned image; при missing image используйте
    `pnpm network:fixture preload` и повторите preflight.
-2. Для каждого case проверьте hashes/provenance и получите canonical view:
+2. До первого `inspect` заполните `Expected before inspector actions` в
+   `diagnosis.md`: получите ISO UTC timestamp командой
+   `node -e 'console.log(new Date().toISOString())'` и предскажите только
+   operational contract — три immutable identities, три network-none parser runs
+   и cleanup каждого. Диагнозы не записывайте до observations.
+3. Для каждого case проверьте hashes/provenance и получите canonical view:
 
    ```bash
    pnpm network:fixture verify fixtures/01-05/interface-not-ready
@@ -133,7 +141,12 @@ unknown.
    pnpm network:fixture inspect fixtures/01-05/icmp-no-reply
    ```
 
-3. В `diagnosis.md` заполните отдельный раздел Case A/B/C:
+   Каждый `inspect` создаёт отдельный `.training/evidence/01-05/<run-id>/` с
+   `preflight.txt`, `events.jsonl`, `inspect.txt` и `post-check.txt`.
+4. Заполните `Inspector run ledger`: для A/B/C укажите run path, `action_at` из
+   `events.jsonl`, `cleanup_at`/marker/counts из `post-check.txt` и все четыре raw
+   references. Global Expected timestamp должен быть раньше каждого action.
+5. В `diagnosis.md` заполните отдельный раздел Case A/B/C:
    - verified source facts/assumptions;
    - cited observations;
    - last proven stage;
@@ -141,7 +154,7 @@ unknown.
    - bounded inference;
    - минимум две remaining unknowns;
    - один следующий minimum discriminating observation без запуска.
-4. Не меняйте fixtures. Каждый `inspect` запускает exact labelled offline
+6. Не меняйте fixtures. Каждый `inspect` запускает exact labelled offline
    container без network, затем обязан завершиться секцией
    `exact_container_absent=true`. Перенесите три cleanup post-check в раздел
    `Offline inspector cleanup` файла `diagnosis.md`.
@@ -160,11 +173,12 @@ window неизвестен или canonical companion расходится с r
 
 ## Проверка и evidence
 
-- Local: `network-evidence` проверяет три case ids, обязательные sections,
-  evidence-reference форму, cleanup post-check и отсутствие TODO. Смысл citations
-  и количество независимых unknowns проверяет agent по rubric.
-- Empirical: fixture hashes/fields воспроизводятся offline; это измерение файла, не
-  живой сети.
+- Local: `network-evidence` проверяет три case ids, один Expected checkpoint, три
+  unique raw runs с упорядоченными timestamps, обязательные sections/citations,
+  cleanup post-check и отсутствие TODO. Смысл citations и количество независимых
+  unknowns проверяет agent по rubric.
+- Empirical: три run-scoped `inspect.txt` воспроизводят fixture hashes/fields
+  offline; это измерение файлов, не живой сети.
 - Agent: проверяет causal boundary, конкурирующие объяснения и отсутствие
   недоказанного root cause.
 - Evidence: `diagnosis.md`.
@@ -172,11 +186,14 @@ window неизвестен или canonical companion расходится с r
 ## DONE
 
 - [ ] Identity/provenance всех трёх bundles проверены.
+- [ ] Expected записан до трёх action markers; run ledger связывает каждый case с
+      preflight/events/inspect/post-check и clean post-state.
 - [ ] Для каждого case названы last proven и earliest missing/disproven stage с
       точной evidence citation.
 - [ ] Root cause не объявлен известным там, где bundle задаёт только boundary.
 - [ ] Для каждого case сохранены unknowns и следующий различающий observation.
-- [ ] Все три offline inspector cleanup post-check сохранены; labelled status чист.
+- [ ] Все три offline inspector cleanup post-check сохранены; labelled counts/status
+      чисты.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.
 
 Следующий шаг `01-06` даст новый bundle без заранее названного symptom shape и

@@ -2,7 +2,8 @@
 
 ## Invariants для PASS
 
-- Expected имеет timestamp/явно записан до action start.
+- Expected имеет ISO 8601 UTC timestamp и явно записан до action start; action и
+  cleanup timestamps взяты из соответствующих raw events.
 - Saved preflight того же run подтверждает effective local `unix://` endpoint,
   rootful Docker Engine/server architecture, `networkInventory.conflictCount=0`,
   initial labelled counts `0/0/0`, pinned image ID, owner label и exact targets
@@ -16,8 +17,8 @@
   containers, networks и volumes либо
   честно фиксирует неуспешный cleanup (в последнем случае PASS невозможен до
   безопасного завершения).
-- Expected/action/cleanup timestamps упорядочены; failed attempts перечислены и не
-  перезаписаны тихо.
+- Expected/action/cleanup timestamps упорядочены; failed attempts перечислены bare
+  run ids отдельно от canonical raw paths и не перезаписаны тихо.
 - `network-evidence` PASS и raw references достаточно для независимой сверки.
 
 ## Valid alternatives

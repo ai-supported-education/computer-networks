@@ -4,8 +4,11 @@
 artifact.
 
 `network-evidence` отклоняет TODO starter, неверный/отсутствующий canonical hash,
-отсутствующие frame 1/2 citations, sections, значения `60 bytes`/`74 bytes` и
-offline cleanup marker. Минимальный structurally complete frame-map проходит.
+отсутствующий или смешанный raw run, неверный Expected/action/cleanup order,
+отсутствующие `preflight.txt`/`events.jsonl`/`inspect.txt`/`post-check.txt`, frame
+1/2 citations, `ip.len`/`frame.cap_len`, значения `60 bytes`/`74 bytes`, labelled
+`0/0/0` и offline cleanup marker. Минимальный structurally complete frame-map
+проходит.
 Regression matrix находится в `packages/network-lab/test/evidence.test.ts`.
 
 Automation проверяет форму и fixed identity, но не заменяет agent: связь fields с

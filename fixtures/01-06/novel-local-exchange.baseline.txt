@@ -1,4 +1,4 @@
-recorded_at=2024-01-01T00:20:00.000Z
+recorded_at=2024-01-01T00:19:59.000Z
 capture_point=alpha:eth0
 eth0_state=UP LOWER_UP
 mac=02:42:ac:1e:00:0a

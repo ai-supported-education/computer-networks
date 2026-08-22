@@ -2,17 +2,23 @@
 
 ## Invariants для PASS
 
+- Expected operational contract записан до всех трёх inspector action markers;
+  ledger содержит три unique preflight/events/inspect/post-check runs с
+  упорядоченными timestamps и clean labelled counts.
 - Все три bundles идентифицированы verified hash/provenance.
 - Каждый case содержит точные citations на baseline/action/events, а не пересказ
   названия directory.
 - Last proven stage и earliest missing/disproven transition согласованы с causal
-  ladder; более поздний симптом не подменяет первую границу.
+  ladder; ARP Request и matching Reply не слиты, а S5/S6 различают Ethernet, IPv4
+  и ICMP evidence; более поздний симптом не подменяет первую границу.
 - Bounded inference не объявляет конкретный root cause без различающего evidence.
 - Для каждого case сохранены минимум две правдоподобные unknowns и предложено одно
   безопасное следующее наблюдение.
 - Cross-case comparison объясняет, почему общий «ping failed» недостаточен.
-- Для каждого из трёх inspect сохранён `exact_container_absent=true`; final
-  labelled status чист.
+- Отсутствие формулируется как «не наблюдалось» в bounded capture; emission не
+  объявляется фактом без отдельного evidence.
+- Для каждого из трёх inspect post-check сохранил `exact_container_absent=true` и
+  нулевые labelled counts; final status чист.
 
 ## Valid alternatives
 

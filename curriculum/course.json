@@ -109,6 +109,7 @@
           "requires": [
             "docker-basics",
             "network-interface",
+            "mac-address",
             "ipv4-address"
           ],
           "introduces": [

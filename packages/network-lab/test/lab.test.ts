@@ -168,6 +168,30 @@ describe("live capture semantic gate", () => {
       "ARP reply не рекламирует expected beta-to-alpha MAC mapping"
     );
   });
+
+  it("rejects target ARP before the first warm Echo but allows later ARP", () => {
+    const mapping =
+      "172.30.0.20 dev eth0 lladdr 02:42:ac:1e:00:14 REACHABLE";
+    const preEchoArp = [
+      header,
+      arpRequest,
+      arpReply(),
+      echoRequest(),
+      echoReply()
+    ].join("\n");
+    expect(validateLiveCapture("warm", preEchoArp, mapping)).toContain(
+      "warm ICMP request потребовал предшествующий ARP exchange"
+    );
+
+    const laterArp = [
+      header,
+      echoRequest(),
+      echoReply(),
+      arpRequest,
+      arpReply()
+    ].join("\n");
+    expect(validateLiveCapture("warm", laterArp, mapping)).toEqual([]);
+  });
 });
 
 describe("Linux link-state gate", () => {

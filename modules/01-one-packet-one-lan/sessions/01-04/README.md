@@ -4,13 +4,13 @@
 
 ## Результат и разрешённый scope
 
-Вы проведёте два bounded live runs между `cn-alpha` и `cn-beta` в изолированной
-Docker LAN:
+Вы проведёте две bounded phases внутри одного live run между `cn-alpha` и
+`cn-beta` в изолированной Docker LAN:
 
 - **cold:** перед probe у `alpha` нет готовой neighbor entry для `beta`;
 - **warm:** entry уже появилась после успешного cold exchange.
 
-Для каждого run сохраните neighbor state, ограниченный capture и normalized
+Для каждой phase сохраните neighbor state, ограниченный capture и normalized
 TShark companion, затем заполните `evidence/comparison.md`. Разрешён единственный
 target `172.30.0.20`, один ICMP Echo, до 3 секунд и не более 8 captured frames на
 phase.
@@ -39,9 +39,9 @@ Ethernet unicast IPv4/ICMP Echo Request
 Ethernet unicast IPv4/ICMP Echo Reply
 ```
 
-При warm run cache lookup уже может вернуть MAC, поэтому новые ARP frames перед
+При warm phase cache lookup уже может вернуть MAC, поэтому новые ARP frames перед
 ICMP не нужны. «Может» здесь важно: cache state и таймеры — runtime facts. Именно
-поэтому мы сохраняем `ip neigh` до каждого probe, а не объявляем второй run warm
+поэтому мы сохраняем `ip neigh` до каждого probe, а не объявляем вторую phase warm
 только по порядковому номеру.
 
 Source fact: формат ARP request/reply определён в
@@ -66,8 +66,10 @@ Synthetic sample (это не ваше observed):
 1  eth.dst=ff:ff:ff:ff:ff:ff arp.opcode=1 arp.dst.proto_ipv4=172.30.0.20
 2  eth.src=02:42:ac:1e:00:14 arp.opcode=2
    arp.src.hw_mac=02:42:ac:1e:00:14 arp.src.proto_ipv4=172.30.0.20
-3  eth.type=0x0800 ip.dst=172.30.0.20 icmp.type=8
-4  eth.type=0x0800 ip.src=172.30.0.20 icmp.type=0
+3  eth.src=02:42:ac:1e:00:0a eth.dst=02:42:ac:1e:00:14
+   eth.type=0x0800 ip.dst=172.30.0.20 icmp.type=8
+4  eth.src=02:42:ac:1e:00:14 eth.dst=02:42:ac:1e:00:0a
+   eth.type=0x0800 ip.src=172.30.0.20 icmp.type=0
 ```
 
 Сначала разрешается link-layer destination, затем отправляется ICMP. Строка 2
@@ -78,8 +80,10 @@ frame. Нельзя утверждать, что «ARP содержит ping»: 
 
 ```text
 neighbor-before: 172.30.0.20 dev eth0 lladdr 02:42:ac:1e:00:14 REACHABLE
-1  eth.type=0x0800 ip.dst=172.30.0.20 icmp.type=8
-2  eth.type=0x0800 ip.src=172.30.0.20 icmp.type=0
+1  eth.src=02:42:ac:1e:00:0a eth.dst=02:42:ac:1e:00:14
+   eth.type=0x0800 ip.dst=172.30.0.20 icmp.type=8
+2  eth.src=02:42:ac:1e:00:14 eth.dst=02:42:ac:1e:00:0a
+   eth.type=0x0800 ip.src=172.30.0.20 icmp.type=0
 ```
 
 Observed neighbor row плюс отсутствие ARP до Echo согласуются с cache reuse.
@@ -129,7 +133,7 @@ interface/filter.
    warm neighbor-before содержит expected IPv4-to-MAC mapping, а Echo Reply
    совпадает со своим Request по observed identifier/sequence.
    Identifier/sequence должны совпасть внутри пары, но их конкретное числовое
-   значение не фиксируется между runs. Capture сначала
+   значение не фиксируется между phases. Capture сначала
    пишется в exact labelled volume, затем `docker cp` создаёт host artifact от
    имени вызывающего пользователя. Повтор создаёт новый run directory и не
    перезаписывает raw pcap.
@@ -179,7 +183,7 @@ interface/filter.
 - [ ] Expected cold/warm timestamp раньше action start; saved preflight показывает
       local `unix://` endpoint, `networkInventory.conflictCount=0`, initial counts
       `0/0/0`, exact targets и pinned environment.
-- [ ] Cold run имеет neighbor-before и bounded capture; warm run имеет отдельные
+- [ ] Cold phase имеет neighbor-before и bounded capture; warm phase имеет отдельные
       snapshot/capture.
 - [ ] Comparison ссылается на observed rows и не сравнивает variable fields как
       фиксированные.

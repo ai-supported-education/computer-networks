@@ -19,6 +19,18 @@ tcpdump, tshark, dig, curl, openssl, nft, conntrack и tc выполняются
 Linux containers. Карточка не требует установки этих tools непосредственно на
 macOS.
 
+## Fixed live inventory v1
+
+| Resource | Interface | IPv4 | MAC |
+| --- | --- | --- | --- |
+| `cn-alpha` | `eth0` | `172.30.0.10` | `02:42:ac:1e:00:0a` |
+| `cn-beta` | `eth0` | `172.30.0.20` | `02:42:ac:1e:00:14` |
+
+Оба endpoint создаются только в internal network `cn-lab` с fixed subnet
+`172.30.0.0/24`. Таблица — declared source fact лаборатории; конкретный run обязан
+подтвердить фактические значения через topology/interface evidence и не переносить
+их в Observed автоматически.
+
 Live topology v1 не поддерживает rootless Docker Engine; preflight сообщает это
 до создания resources. Все Docker-действия разрешены только через local absolute
 `unix://` socket. `ssh://`, `tcp://`, remote contexts и production daemons — stop

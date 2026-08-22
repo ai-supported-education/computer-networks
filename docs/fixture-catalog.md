@@ -26,10 +26,10 @@ versioned fixtures. В live capture timestamps, IP/ICMP identifiers и checksums
 - Canonical text: fixtures/01-03/known-neighbour.txt
 - Capture model: source endpoint after neighbour mapping is known.
 
-| frame | time_epoch | len | Ethernet src to dst | IPv4 src to dst | proto | ICMP type/id/seq |
+| frame | time_epoch | original/captured len | Ethernet src to dst | IPv4 src to dst | proto | ICMP type/id/seq |
 | ---: | ---: | ---: | --- | --- | ---: | --- |
-| 1 | 1704067200.000000 | 74 | ...:0a to ...:14 | .10 to .20 | 1 | 8 / 4660 / 1 |
-| 2 | 1704067200.001000 | 74 | ...:14 to ...:0a | .20 to .10 | 1 | 0 / 4660 / 1 |
+| 1 | 1704067200.000000 | 74 / 74 | ...:0a to ...:14 | .10 to .20 | 1 | 8 / 4660 / 1 |
+| 2 | 1704067200.001000 | 74 / 74 | ...:14 to ...:0a | .20 to .10 | 1 | 0 / 4660 / 1 |
 
 ## 01-05 evidence bundles
 

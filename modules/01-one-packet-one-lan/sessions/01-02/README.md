@@ -18,7 +18,16 @@ course labels и точные имена. Не подключайте лабор
 
 ## До запуска: expected
 
-Запишите прогноз и текущий UTC timestamp в `evidence/baseline.md` до `up`:
+Запишите прогноз и текущий UTC timestamp в `evidence/baseline.md` до `up`.
+Все timestamps в evidence имеют ISO 8601 UTC-форму
+`YYYY-MM-DDTHH:mm:ss.sssZ`, например `2026-08-23T05:40:12.345Z`. Portable способ
+получить timestamp для Expected в этой Node.js repository:
+
+```bash
+node -e 'console.log(new Date().toISOString())'
+```
+
+Скопируйте строку сразу в Expected, а затем запишите прогноз:
 
 - появятся ровно два lab endpoints;
 - у каждого будет `eth0` в состоянии `UP/LOWER_UP`;
@@ -129,7 +138,9 @@ guardrails ручным `docker run --privileged`.
    Engine/server architecture, pinned image ID, checked network inventory с
    `networkInventory.conflictCount=0`, owner label, exact target names и initial
    labelled counts `containers=0`, `networks=0`, `volumes=0`. Затем `events.jsonl`
-   фиксирует отдельный action start marker.
+   фиксирует отдельный action start marker. Для секции Action start скопируйте
+   поле `at` из первой записи с `phase="up"` и `kind="action"`; runner уже пишет
+   его в том же ISO UTC формате.
 
 3. Снимите baseline. Команда печатает выполняемые Linux-команды и добавляет raw
    output в новый run directory; она не переиспользует существующий raw artifact:
@@ -153,8 +164,10 @@ guardrails ручным `docker run --privileged`.
 
    `down` сохраняет `post-check.txt` в той же run directory до удаления active
    state. Заполните `evidence/post-check.md` ссылкой на этот raw файл и фактическими
-   counts. Последующий `status` — независимая видимая перепроверка, но не замена
-   raw post-check.
+   counts. Для Cleanup action скопируйте поле `at` записи `phase="cleanup"`,
+   `kind="cleanup"` из `events.jsonl`; отдельно перенесите `checked_at` из
+   `post-check.txt` как время наблюдения конечного состояния. Последующий `status`
+   — независимая видимая перепроверка, но не замена raw post-check.
 
 ### Если runtime baseline не совпал
 
@@ -163,10 +176,13 @@ guardrails ручным `docker run --privileged`.
 выполнить exact cleanup. Если вы заметили discrepancy отдельно, выполните только
 `pnpm network:lab down`, затем `pnpm network:lab status`.
 
-Сохраните failed run directory и отметьте её в artifact как неуспешную попытку.
-Новый запуск получает другой run id и не перезаписывает её. Если cleanup/post-check
-не PASS, runner сохраняет active state; не удаляйте чужие resources вручную,
-повторите только scoped `down` или остановитесь и передайте evidence на review.
+Сохраните failed run directory и перечислите её bare run id и причину в секции
+`Failed attempts` файла `evidence/baseline.md`. Полные raw paths во всех остальных
+секциях должны ссылаться только на один canonical successful run: так checker не
+спутает его с предыдущими попытками. Новый запуск получает другой run id и не
+перезаписывает failed evidence. Если cleanup/post-check не PASS, runner сохраняет
+active state; не удаляйте чужие resources вручную, повторите только scoped `down`
+или остановитесь и передайте evidence на review.
 
 ## Два правдоподобных неверных пути
 
