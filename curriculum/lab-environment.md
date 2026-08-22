@@ -148,7 +148,8 @@ evidence. Agent review не повторяет рискованное дейст
 Cleanup работает только с сохранёнными endpoint + Engine ID и exact labelled run
 текущей session. Имена/roles ресурсов резервируются в active state до Docker
 create; cleanup сверяет name/ID/owner/run/role, удаляет disposable
-containers/networks/volumes, затем ждёт bounded clean quiescence, чтобы поймать
+containers/networks/volumes (для named volume exact name и есть удаляемая Docker
+identity), затем ждёт bounded clean quiescence, чтобы поймать
 позднее завершение create после CLI timeout. Он возвращает временные
 in-container rules/state в baseline. Он не использует broad host cleanup, не
 удаляет чужие Docker resources и не выполняет ручные изменения host

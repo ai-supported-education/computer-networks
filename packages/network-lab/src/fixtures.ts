@@ -350,11 +350,12 @@ export async function inspectFixture(
       ].join("\n") + "\n"
     );
     recoveryState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       evidenceRunDirectory: evidenceRun.relativeDirectory,
       dockerEndpoint,
       dockerRunId,
       containerName: name,
+      containerRole: "fixture-inspect",
       containerId: null
     };
     await writeFixtureRunArtifact(
@@ -387,7 +388,7 @@ export async function inspectFixture(
         "--label",
         `${LAB_RUN_LABEL_KEY}=${dockerRunId}`,
         "--label",
-        `${LAB_ROLE_LABEL_KEY}=fixture-inspect`,
+        `${LAB_ROLE_LABEL_KEY}=${recoveryState.containerRole}`,
         "--network",
         "none",
         "--cap-drop",
@@ -636,6 +637,7 @@ export async function cleanupFixtureInspectorRun(
     `endpoint=${recovery.dockerEndpoint.endpoint}`,
     `daemon_id=${recovery.dockerEndpoint.daemonId}`,
     `reserved_container=${recovery.containerName}`,
+    `reserved_role=${recovery.containerRole}`,
     `exact_container=${cleanup.containerId ?? recovery.containerId ?? "already-absent"}`,
     "exact_container_absent=true",
     `reconciliation_quiet_ms=${FIXTURE_CLEANUP_QUIET_PERIOD_MS}`,
@@ -688,7 +690,7 @@ async function removeFixtureContainerOnce(
       "inspect",
       target,
       "--format",
-      `{{.Id}}|{{index .Config.Labels "${LAB_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_ROLE_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_RUN_LABEL_KEY}"}}`
+      `{{.Id}}|{{.Name}}|{{index .Config.Labels "${LAB_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_ROLE_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_RUN_LABEL_KEY}"}}`
     ],
     { timeoutMs: 10_000, log: false }
   );
@@ -698,15 +700,18 @@ async function removeFixtureContainerOnce(
       `Fixture cleanup inspect FAILED for ${target}: ${labels.stderr || labels.stdout}`
     );
   }
-  const [containerId, owner, role, runId] = labels.stdout.trim().split("|");
+  const [containerId, observedName, owner, role, runId] = labels.stdout
+    .trim()
+    .split("|");
   if (!containerId) {
     throw new Error(`Fixture cleanup inspect не вернул ID для ${target}.`);
   }
   assertDockerId(containerId);
   if (
     (recovery.containerId !== null && recovery.containerId !== containerId) ||
+    observedName !== `/${recovery.containerName}` ||
     owner !== LAB_OWNER_LABEL ||
-    role !== "fixture-inspect" ||
+    role !== recovery.containerRole ||
     runId !== recovery.dockerRunId
   ) {
     throw new Error(
@@ -743,11 +748,12 @@ interface FixtureEvidenceRun {
 }
 
 interface FixtureRecoveryState {
-  schemaVersion: 2;
+  schemaVersion: 3;
   evidenceRunDirectory: string;
   dockerEndpoint: DockerEndpointInventory;
   dockerRunId: string;
   containerName: string;
+  containerRole: "fixture-inspect";
   containerId: string | null;
 }
 
@@ -810,13 +816,15 @@ async function inspectFixtureContainerSafety(
   const portBindings = host.PortBindings ?? {};
   const exposedPorts = inspect.NetworkSettings?.Ports ?? {};
   const tmpfs = host.Tmpfs ?? {};
+  const tmpfsOptions = (tmpfs["/tmp"] ?? "").split(",").filter(Boolean);
+  const expectedTmpfsOptions = ["rw", "noexec", "nosuid", "size=16m"];
   if (
     inspect.Id !== containerId ||
     inspect.Name !== `/${recovery.containerName}` ||
     inspect.Config?.Image !== LAB_IMAGE ||
     labels[LAB_LABEL_KEY] !== LAB_OWNER_LABEL ||
     labels[LAB_RUN_LABEL_KEY] !== recovery.dockerRunId ||
-    labels[LAB_ROLE_LABEL_KEY] !== "fixture-inspect" ||
+    labels[LAB_ROLE_LABEL_KEY] !== recovery.containerRole ||
     inspect.State?.Running !== true ||
     host.NetworkMode !== "none" ||
     !(
@@ -827,7 +835,7 @@ async function inspectFixtureContainerSafety(
     host.ReadonlyRootfs !== false ||
     !capDrop.includes("ALL") ||
     capAdd.length !== 0 ||
-    !securityOptions.some((entry) => entry.startsWith("no-new-privileges")) ||
+    !securityOptions.includes("no-new-privileges=true") ||
     (host.Binds ?? []).length !== 0 ||
     (inspect.Mounts ?? []).length !== 0 ||
     Object.keys(portBindings).length !== 0 ||
@@ -835,7 +843,8 @@ async function inspectFixtureContainerSafety(
     host.PidsLimit !== 64 ||
     host.Memory !== 128 * 1024 * 1024 ||
     host.NanoCpus !== 500_000_000 ||
-    typeof tmpfs["/tmp"] !== "string"
+    tmpfsOptions.length !== expectedTmpfsOptions.length ||
+    expectedTmpfsOptions.some((option) => !tmpfsOptions.includes(option))
   ) {
     throw new Error(
       "Fixture parser не подтвердил exact offline capability/network/resource safety contract."
@@ -999,7 +1008,7 @@ function assertFixtureRecoveryState(
   }
   const recovery = value as Partial<FixtureRecoveryState>;
   if (
-    recovery.schemaVersion !== 2 ||
+    recovery.schemaVersion !== 3 ||
     recovery.evidenceRunDirectory !== expectedRunDirectory ||
     !recovery.dockerEndpoint ||
     typeof recovery.dockerEndpoint.context !== "string" ||
@@ -1015,6 +1024,7 @@ function assertFixtureRecoveryState(
     typeof recovery.containerName !== "string" ||
     recovery.containerName !==
       `cn-fixture-${recovery.dockerRunId.slice(-12)}` ||
+    recovery.containerRole !== "fixture-inspect" ||
     (recovery.containerId !== null &&
       (typeof recovery.containerId !== "string" ||
         !DOCKER_ID_PATTERN.test(recovery.containerId)))

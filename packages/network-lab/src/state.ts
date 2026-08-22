@@ -17,7 +17,7 @@ import {
 } from "./docker-safety.js";
 
 export interface LabState {
-  schemaVersion: 2;
+  schemaVersion: 3;
   runId: string;
   sessionId: "01-02" | "01-04";
   createdAt: string;
@@ -26,7 +26,7 @@ export interface LabState {
   baselinePassed: boolean;
   dockerEndpoint: DockerEndpointInventory;
   network: DockerResourceReservation;
-  volumeNames: string[];
+  volumes: DockerNamedResourceReservation[];
   containers: {
     alpha: DockerResourceReservation;
     beta: DockerResourceReservation;
@@ -38,6 +38,11 @@ export interface DockerResourceReservation {
   name: string;
   role: string;
   id: string | null;
+}
+
+export interface DockerNamedResourceReservation {
+  name: string;
+  role: string;
 }
 
 export interface LabEvent {
@@ -68,7 +73,7 @@ export async function reserveState(
     path.join(".training", "evidence", sessionId, runId)
   );
   const state: LabState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     runId,
     sessionId,
     createdAt: now.toISOString(),
@@ -77,7 +82,7 @@ export async function reserveState(
     baselinePassed: false,
     dockerEndpoint,
     network: { name: "cn-lab", role: "network", id: null },
-    volumeNames: [],
+    volumes: [],
     containers: {
       alpha: { name: "cn-alpha", role: "alpha", id: null },
       beta: { name: "cn-beta", role: "beta", id: null },
@@ -195,12 +200,13 @@ function assertState(value: unknown): asserts value is LabState {
   }
   const state = value as Partial<LabState>;
   if (
-    state.schemaVersion !== 2 ||
+    state.schemaVersion !== 3 ||
     typeof state.runId !== "string" ||
     !/^[a-zA-Z0-9-]+$/.test(state.runId) ||
     (state.sessionId !== "01-02" && state.sessionId !== "01-04") ||
     typeof state.runDirectory !== "string" ||
-    !state.runDirectory.startsWith(`.training/evidence/${state.sessionId}/`) ||
+    state.runDirectory !==
+      `.training/evidence/${state.sessionId}/${state.runId}` ||
     typeof state.sequence !== "number" ||
     typeof state.baselinePassed !== "boolean" ||
     !state.dockerEndpoint ||
@@ -214,11 +220,10 @@ function assertState(value: unknown): asserts value is LabState {
     ) ||
     !state.network ||
     !state.containers ||
-    !Array.isArray(state.volumeNames) ||
-    state.volumeNames.some(
-      (name) =>
-        typeof name !== "string" ||
-        !/^cn-capture-(?:cold|warm)-[a-f0-9]{8}$/.test(name)
+    !Array.isArray(state.volumes) ||
+    state.volumes.some(
+      (reservation) =>
+        !isVolumeReservation(reservation, state.runId as string)
     ) ||
     !isExactReservation(state.network, "cn-lab", "network") ||
     !isExactReservation(state.containers.alpha, "cn-alpha", "alpha") ||
@@ -268,6 +273,20 @@ function isHelperReservation(
     (reservation.id === null ||
       (typeof reservation.id === "string" &&
         DOCKER_ID_PATTERN.test(reservation.id)))
+  );
+}
+
+function isVolumeReservation(
+  value: unknown,
+  runId: string
+): value is DockerNamedResourceReservation {
+  if (!value || typeof value !== "object") return false;
+  const reservation = value as Partial<DockerNamedResourceReservation>;
+  return (
+    reservation.role === "capture-data" &&
+    typeof reservation.name === "string" &&
+    /^cn-capture-(?:cold|warm)-[a-f0-9]{8}$/.test(reservation.name) &&
+    reservation.name.endsWith(runId.slice(-8))
   );
 }
 

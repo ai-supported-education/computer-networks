@@ -23,7 +23,7 @@ export async function waitForCleanupQuiescence(
   const now = options.now ?? Date.now;
   const wait = options.wait ?? delay;
   const startedAt = now();
-  let quietSince = startedAt;
+  let quietSince: number | null = null;
   let observations = 0;
   let removals = 0;
 
@@ -31,9 +31,12 @@ export async function waitForCleanupQuiescence(
     const pass = await observeAndClean();
     observations += 1;
     removals += pass.removals;
-    if (pass.removals > 0 || !pass.clean) {
-      quietSince = now();
-    } else if (now() - quietSince >= options.quietPeriodMs) {
+    const observedAt = now();
+    if (!pass.clean) {
+      quietSince = null;
+    } else if (pass.removals > 0 || quietSince === null) {
+      quietSince = observedAt;
+    } else if (observedAt - quietSince >= options.quietPeriodMs) {
       return { observations, removals };
     }
     await wait(options.pollIntervalMs);

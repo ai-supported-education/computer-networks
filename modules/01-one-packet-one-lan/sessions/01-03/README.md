@@ -140,8 +140,9 @@ Source/destination pairs поменялись местами, а ICMP type ст�
    остановитесь; выполните только напечатанную команду вида
    `pnpm network:fixture cleanup .training/evidence/01-03/<failed-run-id>`, затем
    проверьте `pnpm network:lab status`. Recovery читает сохранённые endpoint,
-   Engine ID, reserved name, run label и container ID из `recovery.json`, поэтому
-   откажется удалять объект из другого Docker daemon или с другой identity. После
+   Engine ID, reserved name/role, run label и container ID из `recovery.json`,
+   поэтому откажется удалять объект из другого Docker daemon или с другой
+   identity. После
    удаления он ждёт bounded clean quiescence на случай позднего завершения create.
    Напечатанный
    `failed_run` сохраняйте как failed

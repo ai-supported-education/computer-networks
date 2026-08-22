@@ -46,4 +46,28 @@ describe("bounded cleanup reconciliation", () => {
       )
     ).rejects.toThrow("не достиг clean quiescence");
   });
+
+  it("starts the quiet interval only after the first clean observation completes", async () => {
+    let clock = 0;
+    let observations = 0;
+    const result = await waitForCleanupQuiescence(
+      async () => {
+        observations += 1;
+        if (observations === 1) clock += 1_500;
+        return { clean: true, removals: 0 };
+      },
+      {
+        quietPeriodMs: 1_000,
+        timeoutMs: 5_000,
+        pollIntervalMs: 250,
+        now: () => clock,
+        wait: async (milliseconds) => {
+          clock += milliseconds;
+        }
+      }
+    );
+
+    expect(result.observations).toBeGreaterThan(1);
+    expect(clock).toBeGreaterThanOrEqual(2_500);
+  });
 });

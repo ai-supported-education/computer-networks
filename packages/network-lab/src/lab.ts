@@ -30,6 +30,7 @@ import {
   runPath,
   saveState,
   writeRunArtifact,
+  type DockerNamedResourceReservation,
   type DockerResourceReservation,
   type LabState
 } from "./state.js";
@@ -208,6 +209,11 @@ export async function preflightLab(root: string): Promise<PreflightResult> {
         `Exact container name ${name} уже занят; resource не изменён.`
       );
     }
+    if (!isNoSuchDockerObject(inspect, "container")) {
+      throw new Error(
+        `Exact container name ${name} нельзя безопасно проверить: ${inspect.stderr || inspect.stdout}`
+      );
+    }
   }
   const network = await tryCommand(
     "docker",
@@ -216,6 +222,11 @@ export async function preflightLab(root: string): Promise<PreflightResult> {
   );
   if (network.exitCode === 0) {
     throw new Error("Exact network name cn-lab уже занят; resource не изменён.");
+  }
+  if (!isNoSuchDockerObject(network, "network")) {
+    throw new Error(
+      `Exact network name cn-lab нельзя безопасно проверить: ${network.stderr || network.stdout}`
+    );
   }
   const networkInventory = await inspectNetworkSubnets();
   if (networkInventory.conflicts.length > 0) {
@@ -489,9 +500,9 @@ export async function downLab(root: string): Promise<void> {
       failures.push(formatError(error));
     }
   }
-  for (const name of state.volumeNames) {
+  for (const reservation of state.volumes) {
     try {
-      await removeExactVolume(state, name);
+      await removeExactVolume(state, reservation);
     } catch (error) {
       failures.push(formatError(error));
     }
@@ -1487,13 +1498,17 @@ async function createCaptureVolume(
 ): Promise<string> {
   const name = `cn-capture-${phase}-${state.runId.slice(-8)}`;
   assertCaptureVolumeName(name);
-  if (state.volumeNames.includes(name)) {
+  if (state.volumes.some((reservation) => reservation.name === name)) {
     throw new Error(`Capture volume ${name} уже записан в active state.`);
   }
 
   // Reserve the exact target before Docker mutates state. If creation partially
   // succeeds and the command fails, the outer cleanup still knows what to inspect.
-  state.volumeNames.push(name);
+  const reservation: DockerNamedResourceReservation = {
+    name,
+    role: "capture-data"
+  };
+  state.volumes.push(reservation);
   await saveState(root, state);
   await assertStateDockerEndpoint(state);
   if ((await inspectCaptureVolume(name)) !== null) {
@@ -1511,7 +1526,7 @@ async function createCaptureVolume(
       "--label",
       `${LAB_RUN_LABEL_KEY}=${state.runId}`,
       "--label",
-      `${LAB_ROLE_LABEL_KEY}=capture-data`,
+      `${LAB_ROLE_LABEL_KEY}=${reservation.role}`,
       name
     ],
     { timeoutMs: 10_000 }
@@ -1523,9 +1538,10 @@ async function createCaptureVolume(
   }
   const labels = await inspectCaptureVolume(name, true);
   if (
+    labels?.name !== reservation.name ||
     labels?.owner !== LAB_OWNER_LABEL ||
     labels.run !== state.runId ||
-    labels.role !== "capture-data"
+    labels.role !== reservation.role
   ) {
     throw new Error(`Capture volume ${name} не подтвердил exact labels.`);
   }
@@ -1537,9 +1553,15 @@ async function removeAndForgetVolume(
   state: LabState,
   name: string
 ): Promise<void> {
-  await removeExactVolume(state, name);
-  state.volumeNames = state.volumeNames.filter(
-    (candidate) => candidate !== name
+  const reservation = state.volumes.find(
+    (candidate) => candidate.name === name
+  );
+  if (!reservation) {
+    throw new Error(`Capture volume ${name} отсутствует в persisted reservations.`);
+  }
+  await removeExactVolume(state, reservation);
+  state.volumes = state.volumes.filter(
+    (candidate) => candidate !== reservation
   );
   await saveState(root, state);
 }
@@ -1655,23 +1677,28 @@ async function removeExactNetwork(
 
 async function removeExactVolume(
   state: LabState,
-  name: string
+  reservation: DockerNamedResourceReservation
 ): Promise<boolean> {
-  assertCaptureVolumeName(name);
-  const labels = await inspectCaptureVolume(name);
+  assertCaptureVolumeName(reservation.name);
+  const labels = await inspectCaptureVolume(reservation.name);
   if (labels === null) return false;
   if (
+    labels.name !== reservation.name ||
     labels.owner !== LAB_OWNER_LABEL ||
     labels.run !== state.runId ||
-    labels.role !== "capture-data"
+    labels.role !== reservation.role
   ) {
-    throw new Error(`Refuse cleanup: volume ${name} labels mismatch.`);
+    throw new Error(
+      `Refuse cleanup: volume ${reservation.name} не совпадает с persisted name/owner/run/role identity.`
+    );
   }
-  await runCommand("docker", ["volume", "rm", name], {
+  await runCommand("docker", ["volume", "rm", reservation.name], {
     timeoutMs: 15_000
   });
-  if ((await inspectCaptureVolume(name, false)) !== null) {
-    throw new Error(`Volume ${name} всё ещё существует после exact cleanup.`);
+  if ((await inspectCaptureVolume(reservation.name, false)) !== null) {
+    throw new Error(
+      `Volume ${reservation.name} всё ещё существует после exact cleanup.`
+    );
   }
   return true;
 }
@@ -1687,8 +1714,8 @@ async function reconcileReservedResources(state: LabState): Promise<{
       for (const reservation of containers) {
         if (await removeExactContainer(state, reservation)) removals += 1;
       }
-      for (const name of state.volumeNames) {
-        if (await removeExactVolume(state, name)) removals += 1;
+      for (const reservation of state.volumes) {
+        if (await removeExactVolume(state, reservation)) removals += 1;
       }
       if (await removeExactNetwork(state, state.network)) removals += 1;
       const labelled = await labelledResources(true);
@@ -1703,6 +1730,7 @@ async function reconcileReservedResources(state: LabState): Promise<{
 }
 
 async function inspectCaptureVolume(name: string, log = true): Promise<{
+  name: string;
   owner: string;
   run: string;
   role: string;
@@ -1715,7 +1743,7 @@ async function inspectCaptureVolume(name: string, log = true): Promise<{
       "inspect",
       name,
       "--format",
-      `{{index .Labels "${LAB_LABEL_KEY}"}}\t{{index .Labels "${LAB_RUN_LABEL_KEY}"}}\t{{index .Labels "${LAB_ROLE_LABEL_KEY}"}}`
+      `{{.Name}}\t{{index .Labels "${LAB_LABEL_KEY}"}}\t{{index .Labels "${LAB_RUN_LABEL_KEY}"}}\t{{index .Labels "${LAB_ROLE_LABEL_KEY}"}}`
     ],
     { timeoutMs: 10_000, log }
   );
@@ -1727,10 +1755,10 @@ async function inspectCaptureVolume(name: string, log = true): Promise<{
       `Volume ${name} inspect failed: ${inspected.stderr || inspected.stdout}`
     );
   }
-  const [owner = "", run = "", role = ""] = inspected.stdout
+  const [observedName = "", owner = "", run = "", role = ""] = inspected.stdout
     .trim()
     .split("\t");
-  return { owner, run, role };
+  return { name: observedName, owner, run, role };
 }
 
 function validateNetwork(

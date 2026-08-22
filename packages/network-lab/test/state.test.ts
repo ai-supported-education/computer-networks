@@ -19,16 +19,21 @@ describe("persisted Docker recovery state", () => {
       daemonId: "engine-a"
     });
 
-    expect(state.schemaVersion).toBe(2);
+    expect(state.schemaVersion).toBe(3);
     expect(state.network).toEqual({
       name: "cn-lab",
       role: "network",
       id: null
     });
+    expect(state.volumes).toEqual([]);
     state.containers.helpers.push({
       name: `cn-capture-cold-${state.runId.slice(-8)}`,
       role: "capture-cold",
       id: null
+    });
+    state.volumes.push({
+      name: `cn-capture-cold-${state.runId.slice(-8)}`,
+      role: "capture-data"
     });
     await saveState(root, state);
     expect(getReservedContainerCleanupOrder(state)).toEqual([
@@ -52,6 +57,21 @@ describe("persisted Docker recovery state", () => {
       daemonId: "engine-a"
     });
     state.dockerEndpoint.daemonId = "engine-a\nspoof";
+
+    await expect(saveState(root, state)).rejects.toThrow(
+      "Lab state имеет неверную schema"
+    );
+  });
+
+  it("binds the evidence directory exactly to session and run IDs", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "network-state-"));
+    const state = await reserveState(root, "01-02", {
+      context: "default",
+      endpoint: "unix:///tmp/docker.sock",
+      source: "context",
+      daemonId: "engine-a"
+    });
+    state.runDirectory = ".training/evidence/01-02/../../escape";
 
     await expect(saveState(root, state)).rejects.toThrow(
       "Lab state имеет неверную schema"
