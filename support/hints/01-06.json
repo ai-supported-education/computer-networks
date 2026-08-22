@@ -1,0 +1,16 @@
+{
+  "levels": [
+    {
+      "title": "Сначала inventory, потом история",
+      "body": "Не начинайте с общего рассказа про ping. Выпишите все шесть frame rows и только применимые к каждому EtherType поля, затем соединяйте их причинными стрелками."
+    },
+    {
+      "title": "Помечайте тип каждого утверждения",
+      "body": "Фиксированный inventory/provenance — source facts; одна LAN — supplied assumption; extracted rows — observations; объяснение последовательности — inference. Всё, чего capture не показывает, оставьте unknown."
+    },
+    {
+      "title": "Проверка полноты отчёта",
+      "body": "Покройте ARP request/reply, две пары ICMP request/reply, точные citations, минимум три unknowns и counterfactual, который меняет конкретное evidence и тем самым ломает главный inference. Завершите фактическим network:lab status."
+    }
+  ]
+}

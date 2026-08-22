@@ -1,0 +1,16 @@
+{
+  "levels": [
+    {
+      "title": "Baseline — это несколько независимых утверждений",
+      "body": "Проверьте, что для каждого endpoint вы отдельно сослались на имя interface, link state, MAC и IPv4. Наличие одного из этих полей не доказывает остальные."
+    },
+    {
+      "title": "Сверьте evidence с raw run",
+      "body": "Откройте уникальную папку, напечатанную командой baseline. Переносите в Markdown только фактически наблюдавшиеся строки и укажите путь к исходному файлу."
+    },
+    {
+      "title": "Пройдите lifecycle по секциям artifact",
+      "body": "В baseline.md должны различаться expected, action start, raw reference, alpha, beta, inference/unknowns. В post-check.md — cleanup command/time, фактические counts и явный вывод о конечном состоянии. Если status не нулевой, сначала завершите cleanup."
+    }
+  ]
+}

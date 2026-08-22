@@ -1,0 +1,16 @@
+{
+  "levels": [
+    {
+      "title": "Останавливайтесь на первой границе",
+      "body": "Для каждого case идите по causal ladder слева направо. Последний наблюдавшийся stage — ещё не root cause; следующий недоказанный переход задаёт границу диагноза."
+    },
+    {
+      "title": "Читайте bundle в фиксированном порядке",
+      "body": "Сначала baseline, затем action/window/filter, потом events. Отсутствие события имеет смысл только внутри доказанной точки capture и bounded observation window."
+    },
+    {
+      "title": "Проверьте три разные границы",
+      "body": "В одном case baseline уже не доказывает готовый source interface; в другом видны только попытки neighbor resolution; в третьем доказаны resolution и outgoing Echo Request. Для каждого сохраните минимум две unknowns и предложите read-only observation, различающий их."
+    }
+  ]
+}

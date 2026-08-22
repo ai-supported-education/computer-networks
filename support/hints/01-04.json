@@ -1,0 +1,16 @@
+{
+  "levels": [
+    {
+      "title": "Ищите порядок, а не только наличие frames",
+      "body": "Для cold и warm отдельно расположите neighbor-before, ARP events, ICMP request/reply и neighbor-after. Важна позиция ARP относительно первого Echo Request."
+    },
+    {
+      "title": "Два источника evidence",
+      "body": "Вывод о reuse нельзя строить только на отсутствии ARP. Сопоставьте capture с observed IPv4-to-MAC mapping в neighbor-before warm-run и укажите capture point/bounds."
+    },
+    {
+      "title": "Каркас comparison.md",
+      "body": "Сначала оставьте предзаписанные predictions, затем unique run path/start marker. В cold и warm секциях цитируйте конкретные raw files и frame rows. После comparison назовите альтернативу, variable fields и фактический clean status после down."
+    }
+  ]
+}

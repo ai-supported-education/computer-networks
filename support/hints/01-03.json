@@ -1,0 +1,16 @@
+{
+  "levels": [
+    {
+      "title": "Начните с protocol selectors",
+      "body": "EtherType говорит, какой payload несёт Ethernet frame; IPv4 protocol number — какой payload несёт datagram. Только затем сопоставляйте адреса и ICMP type."
+    },
+    {
+      "title": "Разделите поля и арифметику",
+      "body": "Для каждого frame сначала выпишите extracted fields, затем отдельной строкой проверьте длину: IPv4 header + ICMP header + payload, после чего добавьте Ethernet header."
+    },
+    {
+      "title": "Каркас финальной сверки",
+      "body": "Нужны verified SHA-256, два frame id, направления MAC и IPv4, EtherType, protocol, ICMP type/code, две проверки 20 + 8 + 32 и 14 + IPv4 length, а также пометка об отсутствующем FCS и минимум два unknown."
+    }
+  ]
+}
