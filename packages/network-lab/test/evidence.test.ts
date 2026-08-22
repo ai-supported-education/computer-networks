@@ -104,6 +104,24 @@ describe("network evidence artifact contract", () => {
     );
   });
 
+  it("rejects 01-03 evidence without explicit zero labelled-resource counts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "network-evidence-"));
+    await writeFile(
+      path.join(root, "frame-map.md"),
+      completedFrameMap().replace(
+        "; labelled containers=0, networks=0, volumes=0",
+        ""
+      )
+    );
+
+    const result = await validateNetworkEvidence(root, "01-03");
+
+    expect(result.ok).toBe(false);
+    expect(result.messages.join("\n")).toContain(
+      "нулевой labelled resource post-check"
+    );
+  });
+
 });
 
 function baseline(expected: string, runId = "run-a"): string {

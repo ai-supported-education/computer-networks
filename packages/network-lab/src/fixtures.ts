@@ -6,6 +6,7 @@ import {
   open,
   readFile,
   realpath,
+  rename,
   writeFile
 } from "node:fs/promises";
 import path from "node:path";
@@ -22,6 +23,7 @@ import {
 import { runCommand, tryCommand } from "./command.js";
 import {
   isNoSuchDockerObject,
+  isLocalUnixDockerEndpoint,
   requireLocalDockerEndpoint,
   type DockerEndpointInventory
 } from "./docker-safety.js";
@@ -327,6 +329,7 @@ export async function inspectFixture(
   const absolutePcapPath = path.join(root, fixture.pcapRelativePath);
   let containerId: string | null = null;
   let dockerEndpoint: DockerEndpointInventory | null = null;
+  let recoveryState: FixtureRecoveryState | null = null;
   let result: string | null = null;
   let inspectionError: unknown = null;
   try {
@@ -344,6 +347,19 @@ export async function inspectFixture(
         preflight
       ].join("\n") + "\n"
     );
+    recoveryState = {
+      schemaVersion: 1,
+      evidenceRunDirectory: evidenceRun.relativeDirectory,
+      dockerEndpoint,
+      dockerRunId,
+      containerName: name,
+      containerId: null
+    };
+    await writeFixtureRunArtifact(
+      evidenceRun,
+      "recovery.json",
+      JSON.stringify(recoveryState, null, 2) + "\n"
+    );
     await appendFixtureRunEvent(evidenceRun, {
       phase: "preflight",
       kind: "observed",
@@ -352,7 +368,7 @@ export async function inspectFixture(
     await appendFixtureRunEvent(evidenceRun, {
       phase: "inspect",
       kind: "action",
-      detail: `create one network-none parser container for ${fixture.pcapRelativePath}`
+      detail: `create reserved ${name} with run label ${dockerRunId} as one network-none parser for ${fixture.pcapRelativePath}`
     });
     const created = await runCommand(
       "docker",
@@ -391,6 +407,8 @@ export async function inspectFixture(
     );
     containerId = created.stdout.trim();
     assertDockerId(containerId);
+    recoveryState.containerId = containerId;
+    await saveFixtureRecoveryState(evidenceRun, recoveryState);
     await runCommand("docker", ["container", "start", containerId], {
       timeoutMs: 10_000
     });
@@ -503,26 +521,29 @@ export async function inspectFixture(
   }
 
   let cleanupError: unknown = null;
-  if (containerId) {
+  if (recoveryState) {
     await appendFixtureRunEvent(evidenceRun, {
       phase: "cleanup",
       kind: "cleanup",
-      detail: `remove exact fixture-inspect container ${containerId}`
+      detail: `remove reserved ${recoveryState.containerName} after exact endpoint and run-label verification`
     }).catch(() => undefined);
     try {
-      await cleanupFixtureInspector(containerId, dockerEndpoint?.endpoint);
+      containerId =
+        (await cleanupFixtureRecoveryState(recoveryState)) ?? containerId;
     } catch (error) {
       cleanupError = error;
     }
   }
 
   let postCheck: string | null = null;
-  if (dockerEndpoint) {
+  if (recoveryState) {
     try {
-      const cleanPreflight = await preflightFixtureInspector(dockerEndpoint);
+      const cleanPreflight = await preflightFixtureInspector(
+        recoveryState.dockerEndpoint
+      );
       postCheck = [
         `checked_at=${new Date().toISOString()}`,
-        `exact_container=${containerId ?? "not-created"}`,
+        `exact_container=${containerId ?? recoveryState.containerName}`,
         "exact_container_absent=true",
         cleanPreflight
       ].join("\n");
@@ -554,11 +575,12 @@ export async function inspectFixture(
     ).catch(() => undefined);
     throw new Error(
       [
-        `Fixture cleanup FAILED for exact container ${containerId ?? "not-created"}: ${formatUnknownError(cleanupError)}`,
+        `Fixture cleanup FAILED for exact container ${containerId ?? recoveryState?.containerName ?? "not-reserved"}: ${formatUnknownError(cleanupError)}`,
         inspectionError
           ? `Inspection also failed: ${formatUnknownError(inspectionError)}`
           : null,
-        `failed_run=${evidenceRun.relativeDirectory}`
+        `failed_run=${evidenceRun.relativeDirectory}`,
+        `recovery_command=pnpm network:fixture cleanup ${evidenceRun.relativeDirectory}`
       ]
         .filter((line): line is string => Boolean(line))
         .join("\n")
@@ -588,42 +610,76 @@ export async function inspectFixture(
   ].join("\n");
 }
 
-export async function cleanupFixtureInspector(
-  containerId: string,
-  expectedEndpoint?: string
-): Promise<void> {
-  assertDockerId(containerId);
+export async function cleanupFixtureInspectorRun(
+  root: string,
+  runDirectory: string
+): Promise<string> {
+  const { run, recovery } = await readFixtureRecoveryState(root, runDirectory);
+  const removedContainer = await cleanupFixtureRecoveryState(recovery);
+  const cleanPreflight = await preflightFixtureInspector(recovery.dockerEndpoint);
+  const result = [
+    "PASS fixture cleanup",
+    `run=${run.relativeDirectory}`,
+    `endpoint=${recovery.dockerEndpoint.endpoint}`,
+    `reserved_container=${recovery.containerName}`,
+    `exact_container=${removedContainer ?? recovery.containerId ?? "already-absent"}`,
+    "exact_container_absent=true",
+    cleanPreflight
+  ].join("\n");
+  const artifactName =
+    "manual-recovery-" +
+    new Date().toISOString().replace(/[:.]/g, "-") +
+    "-" +
+    randomUUID().slice(0, 8) +
+    ".txt";
+  await writeFile(path.join(run.absoluteDirectory, artifactName), `${result}\n`, {
+    encoding: "utf8",
+    flag: "wx",
+    mode: 0o600
+  });
+  return `${result}\nmanual_recovery=${run.relativeDirectory}/${artifactName}`;
+}
+
+async function cleanupFixtureRecoveryState(
+  recovery: FixtureRecoveryState
+): Promise<string | null> {
   const currentEndpoint = await requireLocalDockerEndpoint();
-  if (expectedEndpoint && currentEndpoint.endpoint !== expectedEndpoint) {
+  if (currentEndpoint.endpoint !== recovery.dockerEndpoint.endpoint) {
     throw new Error(
-      `Refuse fixture cleanup: parser belongs to ${expectedEndpoint}, current endpoint is ${currentEndpoint.endpoint}.`
+      `Refuse fixture cleanup: parser belongs to ${recovery.dockerEndpoint.endpoint}, current endpoint is ${currentEndpoint.endpoint}. Restore the original Docker context first.`
     );
   }
+  const target = recovery.containerId ?? recovery.containerName;
   const labels = await tryCommand(
     "docker",
     [
       "container",
       "inspect",
-      containerId,
+      target,
       "--format",
-      `{{index .Config.Labels "${LAB_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_ROLE_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_RUN_LABEL_KEY}"}}`
+      `{{.Id}}|{{index .Config.Labels "${LAB_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_ROLE_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_RUN_LABEL_KEY}"}}`
     ],
     { timeoutMs: 10_000 }
   );
   if (labels.exitCode !== 0) {
-    if (isNoSuchDockerObject(labels, "container")) return;
+    if (isNoSuchDockerObject(labels, "container")) return null;
     throw new Error(
-      `Fixture cleanup inspect FAILED for ${containerId}: ${labels.stderr || labels.stdout}`
+      `Fixture cleanup inspect FAILED for ${target}: ${labels.stderr || labels.stdout}`
     );
   }
-  const [owner, role, runId] = labels.stdout.split("|");
+  const [containerId, owner, role, runId] = labels.stdout.trim().split("|");
+  if (!containerId) {
+    throw new Error(`Fixture cleanup inspect не вернул ID для ${target}.`);
+  }
+  assertDockerId(containerId);
   if (
+    (recovery.containerId !== null && recovery.containerId !== containerId) ||
     owner !== LAB_OWNER_LABEL ||
     role !== "fixture-inspect" ||
-    !runId?.startsWith("fixture-inspect-")
+    runId !== recovery.dockerRunId
   ) {
     throw new Error(
-      `Refuse cleanup: container ${containerId} не является exact fixture-inspect resource.`
+      `Refuse cleanup: container ${target} не совпадает с persisted fixture-inspect identity.`
     );
   }
   await runCommand(
@@ -646,12 +702,22 @@ export async function cleanupFixtureInspector(
       `Fixture cleanup post-check inspect FAILED for ${containerId}: ${remaining.stderr || remaining.stdout}`
     );
   }
+  return containerId;
 }
 
 interface FixtureEvidenceRun {
   absoluteDirectory: string;
   relativeDirectory: string;
   sequence: number;
+}
+
+interface FixtureRecoveryState {
+  schemaVersion: 1;
+  evidenceRunDirectory: string;
+  dockerEndpoint: DockerEndpointInventory;
+  dockerRunId: string;
+  containerName: string;
+  containerId: string | null;
 }
 
 async function reserveFixtureEvidenceRun(
@@ -674,7 +740,17 @@ async function reserveFixtureEvidenceRun(
   const absoluteDirectory = path.join(root, relativeDirectory);
   await mkdir(path.dirname(absoluteDirectory), { recursive: true });
   await mkdir(absoluteDirectory, { recursive: false });
-  return { absoluteDirectory, relativeDirectory, sequence: 0 };
+  const rootReal = await realpath(root);
+  const runReal = await realpath(absoluteDirectory);
+  const expectedRoot = path.join(rootReal, ".training", "evidence");
+  if (!runReal.startsWith(`${expectedRoot}${path.sep}`)) {
+    throw new Error("Fixture evidence directory выходит за пределы repository.");
+  }
+  return {
+    absoluteDirectory: runReal,
+    relativeDirectory,
+    sequence: 0
+  };
 }
 
 async function appendFixtureRunEvent(
@@ -700,7 +776,12 @@ async function appendFixtureRunEvent(
 
 async function writeFixtureRunArtifact(
   run: FixtureEvidenceRun,
-  filename: "preflight.txt" | "inspect.txt" | "post-check.txt" | "error.txt",
+  filename:
+    | "preflight.txt"
+    | "inspect.txt"
+    | "post-check.txt"
+    | "error.txt"
+    | "recovery.json",
   content: string
 ): Promise<void> {
   await writeFile(path.join(run.absoluteDirectory, filename), content, {
@@ -708,6 +789,89 @@ async function writeFixtureRunArtifact(
     flag: "wx",
     mode: 0o600
   });
+}
+
+async function saveFixtureRecoveryState(
+  run: FixtureEvidenceRun,
+  recovery: FixtureRecoveryState
+): Promise<void> {
+  assertFixtureRecoveryState(recovery, run.relativeDirectory);
+  const target = path.join(run.absoluteDirectory, "recovery.json");
+  const temporary = `${target}.tmp-${process.pid}-${randomUUID()}`;
+  await writeFile(temporary, JSON.stringify(recovery, null, 2) + "\n", {
+    encoding: "utf8",
+    flag: "wx",
+    mode: 0o600
+  });
+  await rename(temporary, target);
+}
+
+async function readFixtureRecoveryState(
+  root: string,
+  runDirectory: string
+): Promise<{ run: FixtureEvidenceRun; recovery: FixtureRecoveryState }> {
+  if (
+    !/^\.training\/evidence\/01-(?:03|05|06)\/[A-Za-z0-9-]+$/.test(
+      runDirectory
+    )
+  ) {
+    throw new Error(
+      "Fixture cleanup требует exact .training/evidence/01-0{3,5,6}/<run-id> path."
+    );
+  }
+  const rootReal = await realpath(root);
+  const requested = path.join(rootReal, runDirectory);
+  const runReal = await realpath(requested).catch(() => null);
+  const expectedRoot = path.join(rootReal, ".training", "evidence");
+  if (!runReal || !runReal.startsWith(`${expectedRoot}${path.sep}`)) {
+    throw new Error("Fixture cleanup run path отсутствует или выходит за repository.");
+  }
+  const recoveryPath = path.join(runReal, "recovery.json");
+  const metadata = await lstat(recoveryPath).catch(() => null);
+  if (!metadata || !metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new Error("Fixture cleanup recovery.json отсутствует или небезопасен.");
+  }
+  const parsed = JSON.parse(await readFile(recoveryPath, "utf8")) as unknown;
+  assertFixtureRecoveryState(parsed, runDirectory);
+  return {
+    run: {
+      absoluteDirectory: runReal,
+      relativeDirectory: runDirectory,
+      sequence: 0
+    },
+    recovery: parsed
+  };
+}
+
+function assertFixtureRecoveryState(
+  value: unknown,
+  expectedRunDirectory: string
+): asserts value is FixtureRecoveryState {
+  if (!value || typeof value !== "object") {
+    throw new Error("Fixture recovery state повреждён.");
+  }
+  const recovery = value as Partial<FixtureRecoveryState>;
+  if (
+    recovery.schemaVersion !== 1 ||
+    recovery.evidenceRunDirectory !== expectedRunDirectory ||
+    !recovery.dockerEndpoint ||
+    typeof recovery.dockerEndpoint.context !== "string" ||
+    typeof recovery.dockerEndpoint.endpoint !== "string" ||
+    !isLocalUnixDockerEndpoint(recovery.dockerEndpoint.endpoint) ||
+    !["context", "DOCKER_CONTEXT", "DOCKER_HOST"].includes(
+      recovery.dockerEndpoint.source ?? ""
+    ) ||
+    typeof recovery.dockerRunId !== "string" ||
+    !/^fixture-inspect-[0-9a-f-]{36}$/.test(recovery.dockerRunId) ||
+    typeof recovery.containerName !== "string" ||
+    recovery.containerName !==
+      `cn-fixture-${recovery.dockerRunId.slice(-12)}` ||
+    (recovery.containerId !== null &&
+      (typeof recovery.containerId !== "string" ||
+        !DOCKER_ID_PATTERN.test(recovery.containerId)))
+  ) {
+    throw new Error("Fixture recovery state имеет неверную schema.");
+  }
 }
 
 function formatUnknownError(error: unknown): string {

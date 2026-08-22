@@ -107,10 +107,12 @@ reply. Expected и observed остаются разными.
    `preflight.txt`, `events.jsonl`, `inspect.txt` и `post-check.txt`. Остановитесь
    при hash mismatch, неизвестном origin, неожиданном network access, cleanup без
    `exact_container_absent=true` или расхождении raw/companion. Fixture не
-   изменяйте. При cleanup failure используйте только напечатанный exact ID:
+   изменяйте. При cleanup failure используйте только напечатанную команду с
+   failed run directory; recovery сверит сохранённые Docker endpoint, reserved
+   name, run label и container ID:
 
    ```bash
-   pnpm network:fixture cleanup <exact-container-id>
+   pnpm network:fixture cleanup .training/evidence/01-06/<failed-run-id>
    pnpm network:lab status
    ```
 

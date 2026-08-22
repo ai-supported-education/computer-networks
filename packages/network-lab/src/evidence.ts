@@ -124,6 +124,11 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         {
           description: "offline cleanup marker",
           pattern: /exact_container_absent\s*=\s*true/i
+        },
+        {
+          description: "нулевой labelled resource post-check",
+          pattern:
+            /(?:labelled[ _])?containers?\s*[:=]\s*0[\s\S]{0,160}(?:labelled[ _])?networks?\s*[:=]\s*0[\s\S]{0,160}(?:labelled[ _])?volumes?\s*[:=]\s*0/i
         }
       ]
     }

@@ -160,11 +160,12 @@ unknown.
    `Offline inspector cleanup` файла `diagnosis.md`.
 
 Если inspect сообщает `Fixture cleanup FAILED`, не продолжайте и не выдавайте
-анализ за DONE. Скопируйте exact 64-символьный container ID из ошибки и повторите
-только проверяющий label recovery:
+анализ за DONE. Выполните только напечатанную recovery-команду с exact failed run
+directory; она сверяет сохранённые Docker endpoint, reserved name, run label и
+container ID перед удалением:
 
 ```bash
-pnpm network:fixture cleanup <exact-container-id>
+pnpm network:fixture cleanup .training/evidence/01-05/<failed-run-id>
 pnpm network:lab status
 ```
 

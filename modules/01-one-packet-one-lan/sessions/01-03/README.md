@@ -127,16 +127,19 @@ Source/destination pairs поменялись местами, а ICMP type ст�
 
    `inspect` повторно проверяет identity/preflight и создаёт новый raw run в
    `.training/evidence/01-03/<run-id>/`: `preflight.txt`, `events.jsonl`,
-   `inspect.txt` и `post-check.txt`. Runner использует `--network none`,
-   `cap-drop=ALL`, `no-new-privileges`,
+   `inspect.txt`, `post-check.txt` и служебный `recovery.json`. Runner использует
+   `--network none`, `cap-drop=ALL`, `no-new-privileges`,
    bounded CPU/memory/PIDs и `--pull never`; verified fixture копируется exact
    `docker cp` в disposable container filesystem, без host bind mount. Writable
    disposable rootfs нужен только parser container и удаляется до PASS.
    Команда считается успешной только если exact offline container удалён и output
    заканчивается `exact_container_absent=true`. При `Fixture cleanup FAILED`
-   остановитесь; используйте напечатанный ID только с
-   `pnpm network:fixture cleanup <exact-container-id>`, затем проверьте
-   `pnpm network:lab status`. Напечатанный `failed_run` сохраняйте как failed
+   остановитесь; выполните только напечатанную команду вида
+   `pnpm network:fixture cleanup .training/evidence/01-03/<failed-run-id>`, затем
+   проверьте `pnpm network:lab status`. Recovery читает сохранённые endpoint,
+   reserved name, run label и container ID из `recovery.json`, поэтому откажется
+   удалять объект из другого Docker daemon или с другой identity. Напечатанный
+   `failed_run` сохраняйте как failed
    evidence; повтор получает новый run id и не перезаписывает его. Недоступный
    daemon или permission error не считается доказательством отсутствия container
    и блокирует cleanup PASS.

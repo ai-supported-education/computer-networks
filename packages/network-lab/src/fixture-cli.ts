@@ -1,5 +1,5 @@
 import {
-  cleanupFixtureInspector,
+  cleanupFixtureInspectorRun,
   generateFixtures,
   inspectFixture,
   preflightFixtureInspector,
@@ -47,14 +47,13 @@ async function main(): Promise<void> {
   }
   if (command === "cleanup") {
     if (!target) {
-      throw new Error("cleanup требует exact container ID из предыдущей ошибки.");
+      throw new Error("cleanup требует failed run directory из предыдущей ошибки.");
     }
-    await cleanupFixtureInspector(target);
-    process.stdout.write(`PASS fixture cleanup exact_container=${target}\n`);
+    process.stdout.write(`${await cleanupFixtureInspectorRun(root, target)}\n`);
     return;
   }
   throw new Error(
-    "Usage: pnpm network:fixture [preload | preflight | verify [target] | inspect <target> | cleanup <container-id> | generate]"
+    "Usage: pnpm network:fixture [preload | preflight | verify [target] | inspect <target> | cleanup <failed-run-directory> | generate]"
   );
 }
 
