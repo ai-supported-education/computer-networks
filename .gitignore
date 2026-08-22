@@ -1,0 +1,8 @@
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+.training/
+.authoring/
+*.log
+.DS_Store

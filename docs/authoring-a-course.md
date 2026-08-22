@@ -1,0 +1,165 @@
+# Руководство автора курса
+
+## 1. Зафиксируйте аудиторию и проверяемый финал
+
+До списка тем опишите в `curriculum/course.json` конкретные входные знания,
+ограничения среды и итоговый artifact capstone. Затем разложите путь назад на
+результаты по 30–60 минут. Module может занимать часы, но каждая карточка должна
+заканчиваться завершённым evidence и безопасным checkpoint.
+
+Если краткой строки `audience` недостаточно, создайте канонический документ,
+например `curriculum/audience.md`, и добавьте его в `courseContextFiles`. Эти
+безопасные текстовые файлы входят в review packets и content hash, поэтому fresh
+reviewer получает ту же модель аудитории, что и автор.
+
+После `Use this template` замените не только placeholder module, но и корневой
+README, название/описание repository и другие template placeholders. Для
+намеренно короткого курса допустим пустой `capstone.sessions`, если последний
+интеграционный результат уже явно завершён в обычной сессии и скрытого продолжения
+нет.
+
+Для каждой сессии заполните:
+
+- `outcome` — что учащийся сможет наблюдаемо сделать;
+- `done` — обязательный критерий завершения;
+- `requires`, `introduces`, `defers` — границы понятий;
+- `checks` — только реально подключённые runner checks;
+- `evidence.produces` — какие артефакты останутся;
+- `evidence.verifiedBy` — `automated`, `empirical`, `agent` и/или
+  `manual-approval`.
+
+Полный маршрут можно зафиксировать до реализации. Для будущей карточки укажите
+`releaseStatus: "planned"` и только roadmap-поля: `id`, `title`, `minutes`,
+`kind`, `outcome`, `requires`, `introduces`, `defers`. Поля `done`, `checks`,
+`evidence` и `contentReview` появляются при переводе в `published`. Опубликованные
+карточки образуют непрерывный префикс курса; runner не открывает planned-материал.
+Отсутствующий `releaseStatus` обратно совместимо означает `published`.
+
+Третьего manifest-статуса для черновика нет. Full-contract карточку готовьте в
+authoring feature branch: там переведите её в `published`, добавьте материалы и
+пройдите checks/content-review. В default branch сессия попадёт только вместе с
+актуальными PASS attestations. Module review всегда покрывает текущий published
+prefix этого module. Когда следующая карточка становится published, прежний hash
+устаревает и весь расширенный prefix проходит module review заново.
+
+Не превращайте вводный module в двухчасовой «базовый блок». Две новые идеи, два
+независимых результата или отдельный setup tail означают две карточки.
+
+## 2. Выберите компонуемые profiles
+
+Добавьте минимальный набор ids в корневой `profiles`. Общие варианты и типовые
+комбинации перечислены в [course-profiles](course-profiles/README.md). Stack-specific
+контракт хранится в `docs/stack-profiles/<id>.md`; например, React/FSD подключается
+только через `react`.
+
+Runner требует документ для каждого выбранного id. Его текст входит в independent
+review packet и content hash, поэтому reviewer видит те же ограничения, что автор.
+Если предмету нужен новый профиль, добавьте узкое правило, а не меняйте общий
+стандарт под один курс.
+
+## 3. Выберите форму evidence, затем шаблон карточки
+
+Используйте ближайший каркас из [templates](../templates/README.md): code, quiz,
+derivation, measurement lab или diagnostic. Не все карточки должны иметь starter и
+unit test.
+
+README даёт достаточный контекст, чтобы учащийся мог объяснить результат:
+
+1. outcome, scope и входное состояние;
+2. причинная модель;
+3. два маленьких примера или полностью заданных сценария;
+4. визуальная структура только там, где связи трудно понять линейно;
+5. два правдоподобных неверных пути;
+6. точное задание и ожидаемый evidence;
+7. способы проверки и DONE;
+8. для lab — preflight, baseline, stop conditions, cleanup/rollback.
+
+Помечайте source fact, assumption, expected, observed и inference. Synthetic/sample
+данные не называются результатом эксперимента. Текст для внимательного чтения
+должен укладываться примерно в 10–15 минут.
+
+## 4. Согласуйте checks с evidence
+
+`pnpm session:check` — локальная автоматизация; он не запускает Codex. Базовый
+runner знает `quiz`, `review` и TypeScript/Vitest-реализации `typecheck`, `unit`,
+`integration`. Новый label без registry implementation не работает. Для другого
+языка замените adapter и добавьте проверку, доказывающую его падение/успех.
+
+Для code exercise starter сохраняет одну целевую проблему, acceptance test падает
+по ожидаемой причине и проходит после минимального решения. Test проверяет
+публичное поведение.
+
+Для расчёта или lab автоматический test необязателен. Обычно используйте
+`checks: ["review"]` и `verifiedBy: ["empirical", "agent"]`: raw evidence получает
+учащийся, а агент сверяет процедуру и rubric. `manual-approval` применяйте только с
+явно названной ролью и критерием, который нельзя честно автоматизировать.
+
+Rubric копируется из `templates/rubric.md` и разделяет invariants, valid
+alternatives, evidence/safety и optional improvements. Не маскируйте смысловую
+оценку хрупким поиском строк.
+
+## 5. Подготовьте quiz и progressive help
+
+В `quiz.md` рядом с каждым вопросом показывайте весь код/сценарий, входные значения
+и порядок действий. Учащийся пишет `reason` своими словами; вопрос не перечисляет
+нужные тезисы ответа.
+
+Hints, quiz keys и reference solutions не лежат в default branch. GitHub не
+переносит дополнительные refs из template, поэтому в новом repository создайте:
+
+```bash
+git switch -c course-support
+git push -u origin course-support
+git switch -
+```
+
+В `course-support` подготовьте последовательные уровни: напоминание концепции,
+область поиска, структура исправления/reference fragment. `session:hint` открывает
+только следующий уровень.
+
+## 6. Докажите карточку до content-review
+
+Для каждой карточки:
+
+1. Выполните `pnpm session:validate`.
+2. Пройдите её из чистой копии как учащийся.
+3. Проверьте заявленное исходное состояние и минимальный путь до DONE.
+4. Для code exercise зафиксируйте ожидаемое падение starter и зелёный минимальный
+   вариант; для lab — безопасный dry run/simulation и корректный cleanup.
+5. Убедитесь, что evidence действительно позволяет применить rubric.
+
+Не записывайте в материал результаты, которых не наблюдали. Если реальную среду
+проверить нельзя, честно ограничьте evidence fixture/simulation.
+
+## 7. Запустите независимого fresh reviewer
+
+Соберите пакет:
+
+```bash
+pnpm author:content-review session <id>
+```
+
+Передайте только пути к packets отдельному subagent с `fork_turns="none"`. Он
+сначала письменно реконструирует материал по `01-blind.md`, затем открывает
+`02-consistency.md` и сверяет profiles, concept graph, rubric, checks, evidence,
+safety и соседние карточки. Reviewer read-only.
+
+После отчёта:
+
+```bash
+pnpm author:content-review --record session <id> PASS --report <path>
+pnpm author:content-review status session <id>
+pnpm author:content-review attest session <id>
+```
+
+При BLOCKER/MAJOR исправьте материал и используйте нового fresh subagent: старый
+диалог уже знает авторский замысел. После PASS всех карточек повторите процедуру для
+module и запишите module attestation. Raw packets/reports остаются локально в
+`.authoring/`; компактные hash attestations публикуются в `curriculum/reviews/`.
+
+## 8. Проведите пилот
+
+Попросите реального учащегося пройти одну карточку без подсказок автора. Исправляйте
+непонятное место в причинной связке, примере, входном состоянии или scope, а не
+только в quiz key. Данные пилота не заменяют fresh content-review, но обнаруживают
+ошибки оценки времени и среды.
