@@ -11,6 +11,8 @@
 - Для каждого case сохранены минимум две правдоподобные unknowns и предложено одно
   безопасное следующее наблюдение.
 - Cross-case comparison объясняет, почему общий «ping failed» недостаточен.
+- Для каждого из трёх inspect сохранён `exact_container_absent=true`; final
+  labelled status чист.
 
 ## Valid alternatives
 
@@ -22,8 +24,10 @@
 
 ## Evidence and safety
 
-Fixtures immutable и synthetic; network access не нужен. Изменение raw artifacts,
-пропуск hash mismatch или запуск probes против внешних targets блокируют PASS.
+Fixtures immutable и synthetic; inspector допускает только local `unix://`
+Docker endpoint, использует `--network none` и не bind-mount-ит host paths.
+Изменение raw artifacts, пропуск hash mismatch или запуск probes против внешних
+targets блокируют PASS.
 
 ## Optional improvements
 

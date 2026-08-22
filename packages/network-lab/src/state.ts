@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { DOCKER_ID_PATTERN } from "./constants.js";
+import type { DockerEndpointInventory } from "./docker-safety.js";
 
 export interface LabState {
   schemaVersion: 1;
@@ -20,7 +21,9 @@ export interface LabState {
   runDirectory: string;
   sequence: number;
   baselinePassed: boolean;
+  dockerEndpoint: DockerEndpointInventory;
   networkId: string | null;
+  volumeNames: string[];
   containerIds: {
     alpha: string | null;
     beta: string | null;
@@ -39,7 +42,8 @@ export interface LabEvent {
 
 export async function reserveState(
   root: string,
-  sessionId: "01-02" | "01-04"
+  sessionId: "01-02" | "01-04",
+  dockerEndpoint: DockerEndpointInventory
 ): Promise<LabState> {
   const stateFile = getStateFile(root);
   const existing = await lstat(stateFile).catch(() => null);
@@ -62,7 +66,9 @@ export async function reserveState(
     runDirectory,
     sequence: 0,
     baselinePassed: false,
+    dockerEndpoint,
     networkId: null,
+    volumeNames: [],
     containerIds: {
       alpha: null,
       beta: null,
@@ -178,7 +184,20 @@ function assertState(value: unknown): asserts value is LabState {
     !state.runDirectory.startsWith(`.training/evidence/${state.sessionId}/`) ||
     typeof state.sequence !== "number" ||
     typeof state.baselinePassed !== "boolean" ||
+    !state.dockerEndpoint ||
+    typeof state.dockerEndpoint.context !== "string" ||
+    typeof state.dockerEndpoint.endpoint !== "string" ||
+    !state.dockerEndpoint.endpoint.startsWith("unix:///") ||
+    !["context", "DOCKER_CONTEXT", "DOCKER_HOST"].includes(
+      state.dockerEndpoint.source ?? ""
+    ) ||
     !state.containerIds ||
+    !Array.isArray(state.volumeNames) ||
+    state.volumeNames.some(
+      (name) =>
+        typeof name !== "string" ||
+        !/^cn-capture-(?:cold|warm)-[a-f0-9]{8}$/.test(name)
+    ) ||
     (state.networkId !== null && typeof state.networkId !== "string") ||
     (state.containerIds.alpha !== null &&
       typeof state.containerIds.alpha !== "string") ||

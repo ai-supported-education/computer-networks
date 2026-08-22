@@ -29,3 +29,7 @@ TODO: что последовательность позволяет заклю�
 ## Unknowns and applicability limits
 
 TODO: минимум два утверждения, которых fixture не доказывает.
+
+## Offline inspector cleanup
+
+TODO: фактические `exact_container_absent=true` и `pnpm network:lab status`.

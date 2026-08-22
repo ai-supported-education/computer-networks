@@ -2,7 +2,8 @@
 
 ## Fixture identity and provenance
 
-TODO: path, observed SHA-256, synthetic provenance.
+TODO: path, observed SHA-256, synthetic provenance и versioned
+`novel-local-exchange.baseline.txt`.
 
 ## Source facts
 
@@ -42,4 +43,5 @@ TODO: одна фраза и область применимости.
 
 ## Cleanup status
 
-TODO: фактический `network:lab status` после offline run.
+TODO: фактические `exact_container_absent=true` и `network:lab status` после
+offline run.

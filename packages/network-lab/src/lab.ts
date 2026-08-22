@@ -14,6 +14,11 @@ import {
 } from "./constants.js";
 import { runCommand, tryCommand } from "./command.js";
 import {
+  ipv4CidrsOverlap,
+  requireLocalDockerEndpoint,
+  type DockerEndpointInventory
+} from "./docker-safety.js";
+import {
   appendEvent,
   readState,
   readStateIfPresent,
@@ -26,11 +31,27 @@ import {
 } from "./state.js";
 
 interface PreflightResult {
+  checkedAt: string;
+  dockerEndpoint: DockerEndpointInventory;
   dockerVersion: string;
   serverOs: string;
   serverArch: string;
   imageId: string;
   availableBytes: number;
+  securityOptions: string[];
+  ownerLabel: string;
+  exactTargetNames: string[];
+  networkInventory: {
+    inspectedCount: number;
+    targetSubnet: string;
+    conflictCount: number;
+    conflicts: Array<{ id: string; name: string; subnet: string }>;
+  };
+  initialResources: {
+    containerRows: string[];
+    networkRows: string[];
+    volumeRows: string[];
+  };
 }
 
 interface DockerServerVersion {
@@ -53,6 +74,7 @@ interface DockerNetworkInspect {
 
 interface DockerContainerInspect {
   Id: string;
+  Name: string;
   Config: {
     Image?: string;
     Labels?: Record<string, string>;
@@ -79,8 +101,10 @@ interface DockerContainerInspect {
 const BETA_ARP_OR_ICMP_FILTER =
   `(arp and (arp[14:4] = 0xac1e0014 or arp[24:4] = 0xac1e0014)) ` +
   `or (icmp and host ${LAB_ENDPOINTS.beta.ipv4})`;
+const CAPTURE_CONTAINER_PATH = "/evidence/capture.pcap";
 
 export async function preloadImage(): Promise<void> {
+  await requireLocalDockerEndpoint();
   await runCommand("docker", ["image", "pull", LAB_IMAGE], {
     timeoutMs: 180_000,
     stdout: "inherit"
@@ -99,6 +123,7 @@ export async function preflightLab(root: string): Promise<PreflightResult> {
       "Active lab state найден. Сначала выполните network:lab down."
     );
   }
+  const dockerEndpoint = await requireLocalDockerEndpoint();
   const version = await runCommand(
     "docker",
     ["version", "--format", "{{json .Server}}"],
@@ -155,7 +180,11 @@ export async function preflightLab(root: string): Promise<PreflightResult> {
   }
 
   const existing = await labelledResources();
-  if (existing.containerRows.length > 0 || existing.networkRows.length > 0) {
+  if (
+    existing.containerRows.length > 0 ||
+    existing.networkRows.length > 0 ||
+    existing.volumeRows.length > 0
+  ) {
     throw new Error(
       "Найдены course-labelled Docker resources без active state; ничего не удалено. Проверьте network:lab status."
     );
@@ -180,6 +209,15 @@ export async function preflightLab(root: string): Promise<PreflightResult> {
   if (network.exitCode === 0) {
     throw new Error("Exact network name cn-lab уже занят; resource не изменён.");
   }
+  const networkInventory = await inspectNetworkSubnets();
+  if (networkInventory.conflicts.length > 0) {
+    const detail = networkInventory.conflicts
+      .map((item) => `${item.name}(${item.subnet})`)
+      .join(", ");
+    throw new Error(
+      `Fixed lab subnet ${LAB_NETWORK.subnet} пересекается с existing Docker network: ${detail}. Ничего не изменено.`
+    );
+  }
 
   const disk = await statfs(root);
   const availableBytes = disk.bavail * disk.bsize;
@@ -187,21 +225,34 @@ export async function preflightLab(root: string): Promise<PreflightResult> {
     throw new Error("Недостаточно 32 MiB свободного места для bounded evidence.");
   }
   const result = {
+    checkedAt: new Date().toISOString(),
+    dockerEndpoint,
     dockerVersion,
     serverOs,
     serverArch,
     imageId,
-    availableBytes
+    availableBytes,
+    securityOptions: Array.isArray(securityOptions)
+      ? securityOptions.filter((entry): entry is string => typeof entry === "string")
+      : [],
+    ownerLabel: `${LAB_LABEL_KEY}=${LAB_OWNER_LABEL}`,
+    exactTargetNames: ["cn-lab", "cn-alpha", "cn-beta"],
+    networkInventory,
+    initialResources: existing
   };
   process.stdout.write(
     [
       "PASS network lab preflight",
+      `docker_context=${dockerEndpoint.context} endpoint=${dockerEndpoint.endpoint} endpoint_source=${dockerEndpoint.source}`,
       `docker=${dockerVersion} server=${serverOs}/${serverArch}`,
       `image=${LAB_IMAGE}`,
       `image_id=${imageId}`,
       `available_bytes=${availableBytes}`,
       "gateway_mode_ipv4=isolated supported by version gate",
-      "labelled_containers=0 labelled_networks=0"
+      `owner_label=${LAB_LABEL_KEY}=${LAB_OWNER_LABEL}`,
+      `exact_targets=cn-lab,cn-alpha,cn-beta`,
+      `target_subnet=${LAB_NETWORK.subnet} inspected_networks=${networkInventory.inspectedCount} subnet_conflicts=${networkInventory.conflictCount}`,
+      `labelled_containers=${existing.containerRows.length} labelled_networks=${existing.networkRows.length} labelled_volumes=${existing.volumeRows.length}`
     ].join("\n") + "\n"
   );
   return result;
@@ -215,7 +266,7 @@ export async function upLab(
     throw new Error("up разрешён только для session 01-02 или 01-04.");
   }
   const preflight = await preflightLab(root);
-  const state = await reserveState(root, sessionId);
+  const state = await reserveState(root, sessionId, preflight.dockerEndpoint);
   try {
     await writeRunArtifact(
       root,
@@ -224,7 +275,8 @@ export async function upLab(
       JSON.stringify(
         {
           schemaVersion: 1,
-          checkedAt: new Date().toISOString(),
+          sessionId,
+          run: state.runDirectory,
           ...preflight,
           image: LAB_IMAGE,
           expected: {
@@ -244,6 +296,11 @@ export async function upLab(
       kind: "expected",
       detail:
         "create one internal isolated IPv4 bridge and two fixed endpoints without host exposure"
+    });
+    await appendEvent(root, state, {
+      phase: "up",
+      kind: "action",
+      detail: "begin exact network creation for cn-lab"
     });
     const network = await runCommand(
       "docker",
@@ -320,6 +377,7 @@ export async function upLab(
 
 export async function baselineLab(root: string): Promise<void> {
   const state = await readState(root);
+  await assertStateDockerEndpoint(state);
   try {
     await collectAndSaveBaseline(root, state);
     process.stdout.write(
@@ -338,6 +396,7 @@ export async function baselineLab(root: string): Promise<void> {
 
 export async function captureLab(root: string): Promise<void> {
   const state = await readState(root);
+  await assertStateDockerEndpoint(state);
   if (state.sessionId !== "01-04") {
     throw new Error("Live cold/warm capture разрешён только для session 01-04.");
   }
@@ -386,6 +445,7 @@ export async function shellLab(
   endpoint: "src" | "dst" | "alpha" | "beta"
 ): Promise<void> {
   const state = await readState(root);
+  await assertStateDockerEndpoint(state);
   const isSource = endpoint === "src" || endpoint === "alpha";
   const containerId = requireId(
     isSource ? state.containerIds.alpha : state.containerIds.beta,
@@ -407,6 +467,7 @@ export async function downLab(root: string): Promise<void> {
     process.stdout.write("PASS down: active lab state отсутствует.\n");
     return;
   }
+  await assertStateDockerEndpoint(state);
   await appendEvent(root, state, {
     phase: "cleanup",
     kind: "cleanup",
@@ -421,6 +482,13 @@ export async function downLab(root: string): Promise<void> {
   for (const id of containers) {
     try {
       await removeExactContainer(state, id);
+    } catch (error) {
+      failures.push(formatError(error));
+    }
+  }
+  for (const name of state.volumeNames) {
+    try {
+      await removeExactVolume(state, name);
     } catch (error) {
       failures.push(formatError(error));
     }
@@ -444,10 +512,15 @@ export async function downLab(root: string): Promise<void> {
   const resources = await labelledResources();
   const postCheck = [
     `checked_at=${new Date().toISOString()}`,
+    `run=${state.runDirectory}`,
+    `owner_label=${LAB_LABEL_KEY}=${LAB_OWNER_LABEL}`,
+    "method=docker container/network/volume ls filtered by exact course owner label",
     "exact_state_containers=0",
     "exact_state_networks=0",
+    "exact_state_volumes=0",
     `labelled_containers=${resources.containerRows.length}`,
-    `labelled_networks=${resources.networkRows.length}`
+    `labelled_networks=${resources.networkRows.length}`,
+    `labelled_volumes=${resources.volumeRows.length}`
   ].join("\n") + "\n";
   if (!isLabelledPostCheckClean(resources)) {
     await writeRunArtifact(
@@ -460,7 +533,7 @@ export async function downLab(root: string): Promise<void> {
       phase: "post-check",
       kind: "error",
       detail:
-        `labelled resources remain: containers=${resources.containerRows.length} networks=${resources.networkRows.length}; active state retained`
+        `labelled resources remain: containers=${resources.containerRows.length} networks=${resources.networkRows.length} volumes=${resources.volumeRows.length}; active state retained`
     });
     throw new Error(
       "Post-check found course-labelled resources; active state retained and PASS not reported."
@@ -471,6 +544,11 @@ export async function downLab(root: string): Promise<void> {
       if (!String(error).includes("EEXIST")) throw error;
     }
   );
+  await appendEvent(root, state, {
+    phase: "post-check",
+    kind: "observed",
+    detail: "exact state and course-labelled Docker resource counts are zero"
+  });
   await removeState(root);
   process.stdout.write(`PASS down\n${postCheck}`);
 }
@@ -478,9 +556,12 @@ export async function downLab(root: string): Promise<void> {
 export function isLabelledPostCheckClean(resources: {
   containerRows: readonly string[];
   networkRows: readonly string[];
+  volumeRows: readonly string[];
 }): boolean {
   return (
-    resources.containerRows.length === 0 && resources.networkRows.length === 0
+    resources.containerRows.length === 0 &&
+    resources.networkRows.length === 0 &&
+    resources.volumeRows.length === 0
   );
 }
 
@@ -504,6 +585,7 @@ export function validateLiveCapture(
     rows,
     (row) =>
       row["arp.opcode"] === "1" &&
+      row["arp.src.proto_ipv4"] === LAB_ENDPOINTS.alpha.ipv4 &&
       row["arp.dst.proto_ipv4"] === LAB_ENDPOINTS.beta.ipv4
   );
   const arpReply = findRow(
@@ -533,6 +615,27 @@ export function validateLiveCapture(
   if (phase === "cold") {
     if (arpRequest < 0) problems.push("нет ARP request к beta IPv4");
     if (arpReply < 0) problems.push("нет matching ARP reply от beta");
+    if (arpRequest >= 0) {
+      const request = rows[arpRequest];
+      if (
+        request?.["eth.src"]?.toLowerCase() !== LAB_ENDPOINTS.alpha.mac ||
+        request?.["eth.dst"]?.toLowerCase() !== "ff:ff:ff:ff:ff:ff" ||
+        request?.["arp.src.hw_mac"]?.toLowerCase() !== LAB_ENDPOINTS.alpha.mac
+      ) {
+        problems.push("ARP request не содержит expected alpha/broadcast MAC fields");
+      }
+    }
+    if (arpReply >= 0) {
+      const reply = rows[arpReply];
+      if (
+        reply?.["eth.src"]?.toLowerCase() !== LAB_ENDPOINTS.beta.mac ||
+        reply?.["eth.dst"]?.toLowerCase() !== LAB_ENDPOINTS.alpha.mac ||
+        reply?.["arp.src.hw_mac"]?.toLowerCase() !== LAB_ENDPOINTS.beta.mac ||
+        reply?.["arp.dst.hw_mac"]?.toLowerCase() !== LAB_ENDPOINTS.alpha.mac
+      ) {
+        problems.push("ARP reply не рекламирует expected beta-to-alpha MAC mapping");
+      }
+    }
     if (arpRequest >= 0 && arpReply >= 0 && !(arpRequest < arpReply)) {
       problems.push("ARP reply не следует после ARP request");
     }
@@ -559,8 +662,39 @@ export function validateLiveCapture(
 
   if (echoRequest < 0) problems.push("нет ICMP Echo Request alpha -> beta");
   if (echoReply < 0) problems.push("нет ICMP Echo Reply beta -> alpha");
+  if (echoRequest >= 0) {
+    const request = rows[echoRequest];
+    if (
+      request?.["eth.src"]?.toLowerCase() !== LAB_ENDPOINTS.alpha.mac ||
+      request?.["eth.dst"]?.toLowerCase() !== LAB_ENDPOINTS.beta.mac
+    ) {
+      problems.push("ICMP Echo Request имеет unexpected Ethernet direction");
+    }
+  }
+  if (echoReply >= 0) {
+    const reply = rows[echoReply];
+    if (
+      reply?.["eth.src"]?.toLowerCase() !== LAB_ENDPOINTS.beta.mac ||
+      reply?.["eth.dst"]?.toLowerCase() !== LAB_ENDPOINTS.alpha.mac
+    ) {
+      problems.push("ICMP Echo Reply имеет unexpected Ethernet direction");
+    }
+  }
   if (echoRequest >= 0 && echoReply >= 0 && !(echoRequest < echoReply)) {
     problems.push("ICMP Echo Reply не следует после request");
+  }
+  if (echoRequest >= 0 && echoReply >= 0) {
+    const request = rows[echoRequest];
+    const reply = rows[echoReply];
+    const requestId = request?.["icmp.ident"] ?? "";
+    const requestSequence = request?.["icmp.seq"] ?? "";
+    const replyId = reply?.["icmp.ident"] ?? "";
+    const replySequence = reply?.["icmp.seq"] ?? "";
+    if (!requestId || !requestSequence || !replyId || !replySequence) {
+      problems.push("ICMP pair не содержит identifier/sequence evidence");
+    } else if (requestId !== replyId || requestSequence !== replySequence) {
+      problems.push("ICMP Echo Reply не совпадает с request по identifier/sequence");
+    }
   }
   return problems;
 }
@@ -579,6 +713,11 @@ function parseTsv(source: string): Record<string, string>[] {
     });
 }
 
+export function hasRequiredLinkFlags(link: string): boolean {
+  const flags = link.match(/<([^>]+)>/)?.[1]?.split(",") ?? [];
+  return flags.includes("UP") && flags.includes("LOWER_UP");
+}
+
 function findRow(
   rows: readonly Record<string, string>[],
   predicate: (row: Record<string, string>) => boolean
@@ -586,16 +725,33 @@ function findRow(
   return rows.findIndex(predicate);
 }
 
-export async function statusLab(): Promise<void> {
+export async function statusLab(root: string): Promise<void> {
+  const activeState = await readStateIfPresent(root);
+  if (activeState) {
+    await assertStateDockerEndpoint(activeState);
+  } else {
+    await requireLocalDockerEndpoint();
+  }
   const resources = await labelledResources();
   process.stdout.write(
     [
       `containers: ${resources.containerRows.length}`,
       ...resources.containerRows,
       `networks: ${resources.networkRows.length}`,
-      ...resources.networkRows
+      ...resources.networkRows,
+      `volumes: ${resources.volumeRows.length}`,
+      ...resources.volumeRows
     ].join("\n") + "\n"
   );
+}
+
+async function assertStateDockerEndpoint(state: LabState): Promise<void> {
+  const current = await requireLocalDockerEndpoint();
+  if (current.endpoint !== state.dockerEndpoint.endpoint) {
+    throw new Error(
+      `Refuse Docker action: active state belongs to ${state.dockerEndpoint.endpoint}, current local endpoint is ${current.endpoint}. Restore the original Docker context first.`
+    );
+  }
 }
 
 async function createEndpoint(
@@ -693,13 +849,25 @@ async function collectAndSaveBaseline(
   if (!alphaInspect || !betaInspect) {
     throw new Error("Endpoint inspect не вернул exact IDs.");
   }
-  validateEndpoint(alphaInspect, state, LAB_ENDPOINTS.alpha.ipv4, LAB_ENDPOINTS.alpha.mac);
-  validateEndpoint(betaInspect, state, LAB_ENDPOINTS.beta.ipv4, LAB_ENDPOINTS.beta.mac);
+  validateEndpoint(
+    alphaInspect,
+    state,
+    "cn-alpha",
+    LAB_ENDPOINTS.alpha.ipv4,
+    LAB_ENDPOINTS.alpha.mac
+  );
+  validateEndpoint(
+    betaInspect,
+    state,
+    "cn-beta",
+    LAB_ENDPOINTS.beta.ipv4,
+    LAB_ENDPOINTS.beta.mac
+  );
 
   const alpha = await endpointLinuxBaseline(alphaId);
   const beta = await endpointLinuxBaseline(betaId);
   if (
-    !alpha.link.includes("UP") ||
+    !hasRequiredLinkFlags(alpha.link) ||
     !alpha.link.toLowerCase().includes(LAB_ENDPOINTS.alpha.mac) ||
     !alpha.ipv4.includes(`${LAB_ENDPOINTS.alpha.ipv4}/24`) ||
     alpha.defaultRoute !== "" ||
@@ -708,7 +876,7 @@ async function collectAndSaveBaseline(
     throw new Error("alpha Linux baseline не совпал с fixed IPv4-only inventory.");
   }
   if (
-    !beta.link.includes("UP") ||
+    !hasRequiredLinkFlags(beta.link) ||
     !beta.link.toLowerCase().includes(LAB_ENDPOINTS.beta.mac) ||
     !beta.ipv4.includes(`${LAB_ENDPOINTS.beta.ipv4}/24`) ||
     beta.defaultRoute !== "" ||
@@ -731,6 +899,36 @@ async function collectAndSaveBaseline(
   if (echoIgnore.stdout !== "0") {
     throw new Error("beta kernel настроен игнорировать ICMP Echo.");
   }
+
+  await writeRunArtifact(
+    root,
+    state,
+    "topology-inspect.json",
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        observedAt: new Date().toISOString(),
+        run: state.runDirectory,
+        network: {
+          id: network.Id,
+          name: network.Name,
+          driver: network.Driver,
+          internal: network.Internal,
+          enableIpv6: network.EnableIPv6,
+          subnet: network.IPAM?.Config?.[0]?.Subnet ?? null,
+          gatewayModeIpv4:
+            network.Options?.[LAB_NETWORK.gatewayModeOption] ?? null,
+          runLabel: network.Labels?.[LAB_RUN_LABEL_KEY] ?? null
+        },
+        endpoints: {
+          alpha: normalizedEndpointInspect(alphaInspect),
+          beta: normalizedEndpointInspect(betaInspect)
+        }
+      },
+      null,
+      2
+    ) + "\n"
+  );
 
   const text = [
     `observed_at=${new Date().toISOString()}`,
@@ -847,13 +1045,17 @@ async function capturePhase(
     before.stdout + "\n"
   );
 
+  const captureVolume = await createCaptureVolume(root, state, phase);
   const captureId = await createHelper(
     root,
     state,
     `capture-${phase}`,
     ["NET_ADMIN", "NET_RAW"],
     [
-      "tshark",
+      "sh",
+      "-c",
+      'tshark "$@"; status=$?; printf "%s\\n" "$status" > /tmp/capture.exit; exec sleep infinity',
+      "capture",
       "-q",
       "-n",
       "-p",
@@ -870,10 +1072,12 @@ async function capturePhase(
       "-F",
       "pcap",
       "-w",
-      "/evidence/capture.pcap"
+      CAPTURE_CONTAINER_PATH
     ],
     `container:${alphaId}`,
-    [`type=bind,source=${phaseDirectory},target=/evidence`]
+    [
+      `type=volume,source=${captureVolume},target=/evidence,volume-nocopy`
+    ]
   );
   await runCommand("docker", ["container", "start", captureId], {
     timeoutMs: 10_000
@@ -923,9 +1127,14 @@ async function capturePhase(
     ping.stdout + "\n"
   );
 
-  await waitContainerSuccess(
+  await waitForCaptureFinished(
     captureId,
     (CAPTURE_LIMITS.durationSeconds + 5) * 1000
+  );
+  await runCommand(
+    "docker",
+    ["container", "cp", `${captureId}:${CAPTURE_CONTAINER_PATH}`, pcapPath],
+    { timeoutMs: 10_000 }
   );
   const pcapStat = await stat(pcapPath);
   if (pcapStat.size <= 24 || pcapStat.size > CAPTURE_LIMITS.maxBytes) {
@@ -941,7 +1150,7 @@ async function capturePhase(
     `${phase}/capture.sha256.txt`,
     `${hash}  capture.pcap\n`
   );
-  const normalized = await analyzeLivePcap(root, state, phase, pcapPath);
+  const normalized = await analyzeLivePcap(captureId);
   await writeRunArtifact(
     root,
     state,
@@ -1010,6 +1219,7 @@ async function capturePhase(
     ) + "\n"
   );
   await removeAndForgetHelpers(root, state, [probeId, captureId]);
+  await removeAndForgetVolume(root, state, captureVolume);
 }
 
 async function flushTargetNeighbour(
@@ -1101,76 +1311,63 @@ async function createHelper(
   return id;
 }
 
-async function analyzeLivePcap(
-  root: string,
-  state: LabState,
-  phase: string,
-  pcapPath: string
-): Promise<string> {
-  const analysisId = await createHelper(
-    root,
-    state,
-    `analysis-${phase}`,
-    [],
-    ["sleep", "infinity"],
-    "none",
-    [`type=bind,source=${pcapPath},target=/input.pcap,readonly`]
+async function analyzeLivePcap(captureId: string): Promise<string> {
+  const result = await runCommand(
+    "docker",
+    [
+      "container",
+      "exec",
+      captureId,
+      "tshark",
+      "-n",
+      "-r",
+      CAPTURE_CONTAINER_PATH,
+      "-T",
+      "fields",
+      "-E",
+      "header=y",
+      "-E",
+      "separator=/t",
+      "-E",
+      "occurrence=f",
+      "-e",
+      "frame.number",
+      "-e",
+      "frame.time_relative",
+      "-e",
+      "frame.len",
+      "-e",
+      "eth.src",
+      "-e",
+      "eth.dst",
+      "-e",
+      "eth.type",
+      "-e",
+      "arp.opcode",
+      "-e",
+      "arp.src.hw_mac",
+      "-e",
+      "arp.src.proto_ipv4",
+      "-e",
+      "arp.dst.hw_mac",
+      "-e",
+      "arp.dst.proto_ipv4",
+      "-e",
+      "ip.src",
+      "-e",
+      "ip.dst",
+      "-e",
+      "icmp.type",
+      "-e",
+      "icmp.code",
+      "-e",
+      "icmp.ident",
+      "-e",
+      "icmp.seq"
+    ],
+    { timeoutMs: 15_000 }
   );
-  try {
-    await runCommand("docker", ["container", "start", analysisId], {
-      timeoutMs: 10_000
-    });
-    const result = await runCommand(
-      "docker",
-      [
-        "container",
-        "exec",
-        analysisId,
-        "tshark",
-        "-n",
-        "-r",
-        "/input.pcap",
-        "-T",
-        "fields",
-        "-E",
-        "header=y",
-        "-E",
-        "separator=/t",
-        "-E",
-        "occurrence=f",
-        "-e",
-        "frame.number",
-        "-e",
-        "frame.time_relative",
-        "-e",
-        "frame.len",
-        "-e",
-        "eth.src",
-        "-e",
-        "eth.dst",
-        "-e",
-        "eth.type",
-        "-e",
-        "arp.opcode",
-        "-e",
-        "arp.src.proto_ipv4",
-        "-e",
-        "arp.dst.proto_ipv4",
-        "-e",
-        "ip.src",
-        "-e",
-        "ip.dst",
-        "-e",
-        "icmp.type",
-        "-e",
-        "icmp.code"
-      ],
-      { timeoutMs: 15_000 }
-    );
-    return result.stdout;
-  } finally {
-    await removeAndForgetHelpers(root, state, [analysisId]);
-  }
+  return result.stdout;
 }
 
 async function waitForCaptureReady(containerId: string): Promise<void> {
@@ -1184,7 +1381,7 @@ async function waitForCaptureReady(containerId: string): Promise<void> {
         containerId,
         "test",
         "-s",
-        "/evidence/capture.pcap"
+        CAPTURE_CONTAINER_PATH
       ],
       { timeoutMs: 2_000 }
     );
@@ -1192,6 +1389,40 @@ async function waitForCaptureReady(containerId: string): Promise<void> {
     await new Promise<void>((resolve) => setTimeout(resolve, 200));
   }
   throw new Error("Capture helper не подтвердил ready marker за 5 seconds.");
+}
+
+async function waitForCaptureFinished(
+  containerId: string,
+  timeoutMs: number
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ready = await tryCommand(
+      "docker",
+      ["container", "exec", containerId, "test", "-s", "/tmp/capture.exit"],
+      { timeoutMs: 2_000 }
+    );
+    if (ready.exitCode === 0) {
+      const status = await runCommand(
+        "docker",
+        ["container", "exec", containerId, "cat", "/tmp/capture.exit"],
+        { timeoutMs: 2_000 }
+      );
+      if (status.stdout.trim() !== "0") {
+        const logs = await tryCommand(
+          "docker",
+          ["container", "logs", containerId],
+          { timeoutMs: 2_000 }
+        );
+        throw new Error(
+          `Capture helper завершил TShark с code ${status.stdout.trim()}: ${logs.stderr || logs.stdout}`
+        );
+      }
+      return;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error("Capture helper не завершил bounded TShark за timeout.");
 }
 
 async function waitContainerSuccess(
@@ -1229,6 +1460,69 @@ async function removeAndForgetHelpers(
   }
 }
 
+async function createCaptureVolume(
+  root: string,
+  state: LabState,
+  phase: "cold" | "warm"
+): Promise<string> {
+  const name = `cn-capture-${phase}-${state.runId.slice(-8)}`;
+  assertCaptureVolumeName(name);
+  if (state.volumeNames.includes(name)) {
+    throw new Error(`Capture volume ${name} уже записан в active state.`);
+  }
+
+  // Reserve the exact target before Docker mutates state. If creation partially
+  // succeeds and the command fails, the outer cleanup still knows what to inspect.
+  state.volumeNames.push(name);
+  await saveState(root, state);
+  if ((await inspectCaptureVolume(name)) !== null) {
+    throw new Error(
+      `Exact capture volume name ${name} уже занят; existing volume не изменён.`
+    );
+  }
+  const created = await runCommand(
+    "docker",
+    [
+      "volume",
+      "create",
+      "--label",
+      `${LAB_LABEL_KEY}=${LAB_OWNER_LABEL}`,
+      "--label",
+      `${LAB_RUN_LABEL_KEY}=${state.runId}`,
+      "--label",
+      `${LAB_ROLE_LABEL_KEY}=capture-data`,
+      name
+    ],
+    { timeoutMs: 10_000 }
+  );
+  if (created.stdout.trim() !== name) {
+    throw new Error(
+      `Docker volume create вернул unexpected name: ${created.stdout.trim()}`
+    );
+  }
+  const labels = await inspectCaptureVolume(name);
+  if (
+    labels?.owner !== LAB_OWNER_LABEL ||
+    labels.run !== state.runId ||
+    labels.role !== "capture-data"
+  ) {
+    throw new Error(`Capture volume ${name} не подтвердил exact labels.`);
+  }
+  return name;
+}
+
+async function removeAndForgetVolume(
+  root: string,
+  state: LabState,
+  name: string
+): Promise<void> {
+  await removeExactVolume(state, name);
+  state.volumeNames = state.volumeNames.filter(
+    (candidate) => candidate !== name
+  );
+  await saveState(root, state);
+}
+
 async function removeExactContainer(
   state: LabState,
   id: string
@@ -1253,7 +1547,7 @@ async function removeExactContainer(
   }
   await runCommand(
     "docker",
-    ["container", "rm", "--force", id],
+    ["container", "rm", "--volumes", "--force", id],
     { timeoutMs: 15_000 }
   );
 }
@@ -1281,6 +1575,59 @@ async function removeExactNetwork(
   await runCommand("docker", ["network", "rm", id], {
     timeoutMs: 15_000
   });
+}
+
+async function removeExactVolume(
+  state: LabState,
+  name: string
+): Promise<void> {
+  assertCaptureVolumeName(name);
+  const labels = await inspectCaptureVolume(name);
+  if (labels === null) return;
+  if (
+    labels.owner !== LAB_OWNER_LABEL ||
+    labels.run !== state.runId ||
+    labels.role !== "capture-data"
+  ) {
+    throw new Error(`Refuse cleanup: volume ${name} labels mismatch.`);
+  }
+  await runCommand("docker", ["volume", "rm", name], {
+    timeoutMs: 15_000
+  });
+  if ((await inspectCaptureVolume(name)) !== null) {
+    throw new Error(`Volume ${name} всё ещё существует после exact cleanup.`);
+  }
+}
+
+async function inspectCaptureVolume(name: string): Promise<{
+  owner: string;
+  run: string;
+  role: string;
+} | null> {
+  assertCaptureVolumeName(name);
+  const inspected = await tryCommand(
+    "docker",
+    [
+      "volume",
+      "inspect",
+      name,
+      "--format",
+      `{{index .Labels "${LAB_LABEL_KEY}"}}\t{{index .Labels "${LAB_RUN_LABEL_KEY}"}}\t{{index .Labels "${LAB_ROLE_LABEL_KEY}"}}`
+    ],
+    { timeoutMs: 10_000 }
+  );
+  if (inspected.exitCode !== 0) {
+    if (/no such volume/i.test(`${inspected.stdout}\n${inspected.stderr}`)) {
+      return null;
+    }
+    throw new Error(
+      `Volume ${name} inspect failed: ${inspected.stderr || inspected.stdout}`
+    );
+  }
+  const [owner = "", run = "", role = ""] = inspected.stdout
+    .trim()
+    .split("\t");
+  return { owner, run, role };
 }
 
 function validateNetwork(
@@ -1313,6 +1660,7 @@ function validateNetwork(
 function validateEndpoint(
   inspect: DockerContainerInspect,
   state: LabState,
+  expectedName: "cn-alpha" | "cn-beta",
   ipv4: string,
   mac: string
 ): void {
@@ -1321,6 +1669,7 @@ function validateEndpoint(
   const portBindings = inspect.HostConfig.PortBindings ?? {};
   const ports = inspect.NetworkSettings?.Ports ?? {};
   if (
+    inspect.Name !== `/${expectedName}` ||
     inspect.Config.Image !== LAB_IMAGE ||
     inspect.Config.Labels?.[LAB_RUN_LABEL_KEY] !== state.runId ||
     inspect.State.Running !== true ||
@@ -1341,9 +1690,81 @@ function validateEndpoint(
   }
 }
 
+function normalizedEndpointInspect(inspect: DockerContainerInspect): object {
+  const networks = Object.values(inspect.NetworkSettings?.Networks ?? {});
+  const endpoint = networks[0];
+  return {
+    id: inspect.Id,
+    name: inspect.Name.replace(/^\//, ""),
+    image: inspect.Config.Image ?? null,
+    runLabel: inspect.Config.Labels?.[LAB_RUN_LABEL_KEY] ?? null,
+    running: inspect.State.Running === true,
+    privileged: inspect.HostConfig.Privileged === true,
+    readonlyRootfs: inspect.HostConfig.ReadonlyRootfs === true,
+    capDrop: inspect.HostConfig.CapDrop ?? [],
+    capAdd: inspect.HostConfig.CapAdd ?? [],
+    networkMode: inspect.HostConfig.NetworkMode ?? null,
+    portBindingCount: Object.keys(inspect.HostConfig.PortBindings ?? {}).length,
+    exposedPortCount: Object.keys(inspect.NetworkSettings?.Ports ?? {}).length,
+    mountCount: inspect.Mounts?.length ?? 0,
+    ipv4: endpoint?.IPAddress ?? null,
+    mac: endpoint?.MacAddress?.toLowerCase() ?? null
+  };
+}
+
+async function inspectNetworkSubnets(): Promise<{
+  inspectedCount: number;
+  targetSubnet: string;
+  conflictCount: number;
+  conflicts: Array<{ id: string; name: string; subnet: string }>;
+}> {
+  const listed = await runCommand(
+    "docker",
+    ["network", "ls", "--format", "{{.ID}}"],
+    { timeoutMs: 10_000 }
+  );
+  const ids = nonemptyLines(listed.stdout);
+  if (ids.some((id) => !/^[a-f0-9]{12,64}$/.test(id))) {
+    throw new Error("Docker network inventory содержит unexpected ID.");
+  }
+  if (ids.length === 0) {
+    return {
+      inspectedCount: 0,
+      targetSubnet: LAB_NETWORK.subnet,
+      conflictCount: 0,
+      conflicts: []
+    };
+  }
+  const inspected = JSON.parse(
+    (
+      await runCommand("docker", ["network", "inspect", ...ids], {
+        timeoutMs: 15_000
+      })
+    ).stdout
+  ) as DockerNetworkInspect[];
+  const conflicts = inspected.flatMap((network) =>
+    (network.IPAM?.Config ?? [])
+      .map((config) => config.Subnet)
+      .filter((subnet): subnet is string => Boolean(subnet))
+      .filter((subnet) => ipv4CidrsOverlap(subnet, LAB_NETWORK.subnet))
+      .map((subnet) => ({
+        id: network.Id,
+        name: network.Name,
+        subnet
+      }))
+  );
+  return {
+    inspectedCount: inspected.length,
+    targetSubnet: LAB_NETWORK.subnet,
+    conflictCount: conflicts.length,
+    conflicts
+  };
+}
+
 async function labelledResources(): Promise<{
   containerRows: string[];
   networkRows: string[];
+  volumeRows: string[];
 }> {
   const label = `${LAB_LABEL_KEY}=${LAB_OWNER_LABEL}`;
   const containers = await runCommand(
@@ -1371,10 +1792,29 @@ async function labelledResources(): Promise<{
     ],
     { timeoutMs: 10_000 }
   );
+  const volumes = await runCommand(
+    "docker",
+    [
+      "volume",
+      "ls",
+      "--filter",
+      `label=${label}`,
+      "--format",
+      "{{.Name}}\t{{.Driver}}"
+    ],
+    { timeoutMs: 10_000 }
+  );
   return {
     containerRows: nonemptyLines(containers.stdout),
-    networkRows: nonemptyLines(networks.stdout)
+    networkRows: nonemptyLines(networks.stdout),
+    volumeRows: nonemptyLines(volumes.stdout)
   };
+}
+
+function assertCaptureVolumeName(name: string): void {
+  if (!/^cn-capture-(?:cold|warm)-[a-f0-9]{8}$/.test(name)) {
+    throw new Error(`Unsafe capture volume name: ${name}`);
+  }
 }
 
 async function recordError(

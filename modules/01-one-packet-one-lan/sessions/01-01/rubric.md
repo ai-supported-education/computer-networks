@@ -2,10 +2,12 @@
 
 ## Invariants для PASS
 
-- На все четыре вопроса дан выбранный ответ и непустой самостоятельный `reason`.
+- На все шесть вопросов дан выбранный ответ и непустой самостоятельный `reason`.
 - Объяснение различает interface, link-layer address, IPv4 address и ICMP message.
-- Вложенность Ethernet → IPv4 → ICMP описана причинно, без «превращения» одного
-  адреса в другой.
+- Encapsulation описана как ICMP message → IPv4 datagram → Ethernet frame, а
+  decapsulation — как чтение outer Ethernet header → IPv4 → ICMP.
+- Source/destination MAC и source/destination IPv4 правильно привязаны к своим
+  headers и endpoints в заданном incoming scenario.
 - Наличие request не используется как доказательство reply или end-to-end success.
 - Frame с иным EtherType не разбирается как IPv4 только по сходству окружения.
 

@@ -82,3 +82,8 @@ TODO
 
 TODO: почему одинаковый верхнеуровневый symptom не означает одинаковую causal
 boundary.
+
+## Offline inspector cleanup
+
+TODO: три фактических `exact_container_absent=true` из inspect и итоговый
+`pnpm network:lab status`.

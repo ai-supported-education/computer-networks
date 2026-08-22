@@ -25,21 +25,22 @@ S0 requested action exists
  ↓
 S1 source interface is ready
  ↓
-S2 source emits a relevant Ethernet frame
- ↓
-S3 ARP request receives a matching ARP reply
- ↓
-S4 neighbor mapping is available
- ↓
-S5 ICMP Echo Request is emitted toward beta
- ↓
-S6 matching ICMP Echo Reply is observed back at alpha
+S2 neighbor-before is observed as present or absent
+ ├─ mapping present ───────────────────────────────┐
+ └─ mapping absent → S3 ARP request → matching reply
+                                      ↓            │
+                            S4 mapping available ←─┘
+                                      ↓
+                     S5 ICMP Echo Request emitted
+                                      ↓
+              S6 matching ICMP Echo Reply observed
 ```
 
-Каждый переход имеет собственное evidence. Если S2 не достигнут, данные ничего не
-говорят о том, ответил бы `beta` на ARP. Если S3 не достигнут, отсутствие ICMP
-Request ожидаемо и ещё не проверяет ICMP handling. Если S5 достигнут, ARP уже не
-является самой ранней границей данного run.
+Каждый переход имеет собственное evidence. S3 — только cold/cache-miss branch:
+при уже observed mapping warm path законно идёт от S2 прямо к S4. Если mapping
+absent и S3 не завершён matching reply, отсутствие ICMP Request ожидаемо и ещё не
+проверяет ICMP handling. Если S5 достигнут, ARP уже не является самой ранней
+границей данного run.
 
 «Нет frame в capture» считается evidence только когда bundle подтверждает capture
 point, interval/filter и requested action. Иначе отсутствие могло возникнуть из-за
@@ -74,7 +75,8 @@ events:
   -- capture ends, no matching type=0 --
 ```
 
-Подтверждены S1, S2, S4 и S5. Самая ранняя недоказанная граница — S6: reply не
+Подтверждены S1, warm-ветка S2, S4 и S5; S3 здесь не требуется. Самая ранняя
+недоказанная граница — S6: reply не
 наблюдался в заявленном window. Это не доказывает, что `beta firewall dropped`:
 возможны обработка на `beta`, обратная отправка, capture loss и другие unknowns.
 
@@ -115,7 +117,10 @@ unknown.
 
 ## Процедура
 
-1. Для каждого case проверьте hashes/provenance и получите canonical view:
+1. Выполните `pnpm network:fixture preflight`. Продолжайте только после PASS для
+   local `unix://` endpoint и pinned image; при missing image используйте
+   `pnpm network:fixture preload` и повторите preflight.
+2. Для каждого case проверьте hashes/provenance и получите canonical view:
 
    ```bash
    pnpm network:fixture verify fixtures/01-05/interface-not-ready
@@ -128,7 +133,7 @@ unknown.
    pnpm network:fixture inspect fixtures/01-05/icmp-no-reply
    ```
 
-2. В `diagnosis.md` заполните отдельный раздел Case A/B/C:
+3. В `diagnosis.md` заполните отдельный раздел Case A/B/C:
    - verified source facts/assumptions;
    - cited observations;
    - last proven stage;
@@ -136,8 +141,19 @@ unknown.
    - bounded inference;
    - минимум две remaining unknowns;
    - один следующий minimum discriminating observation без запуска.
-3. Не меняйте fixtures. Offline container работает без network; cleanup внешнего
-   состояния не требуется.
+4. Не меняйте fixtures. Каждый `inspect` запускает exact labelled offline
+   container без network, затем обязан завершиться секцией
+   `exact_container_absent=true`. Перенесите три cleanup post-check в раздел
+   `Offline inspector cleanup` файла `diagnosis.md`.
+
+Если inspect сообщает `Fixture cleanup FAILED`, не продолжайте и не выдавайте
+анализ за DONE. Скопируйте exact 64-символьный container ID из ошибки и повторите
+только проверяющий label recovery:
+
+```bash
+pnpm network:fixture cleanup <exact-container-id>
+pnpm network:lab status
+```
 
 Остановитесь и не делайте диагноз, если hash/provenance не совпал, observation
 window неизвестен или canonical companion расходится с raw artifact.
@@ -145,7 +161,8 @@ window неизвестен или canonical companion расходится с r
 ## Проверка и evidence
 
 - Local: `network-evidence` проверяет три case ids, обязательные sections,
-  evidence citations, unknowns и отсутствие TODO.
+  evidence-reference форму, cleanup post-check и отсутствие TODO. Смысл citations
+  и количество независимых unknowns проверяет agent по rubric.
 - Empirical: fixture hashes/fields воспроизводятся offline; это измерение файла, не
   живой сети.
 - Agent: проверяет causal boundary, конкурирующие объяснения и отсутствие
@@ -159,6 +176,7 @@ window неизвестен или canonical companion расходится с r
       точной evidence citation.
 - [ ] Root cause не объявлен известным там, где bundle задаёт только boundary.
 - [ ] Для каждого case сохранены unknowns и следующий различающий observation.
+- [ ] Все три offline inspector cleanup post-check сохранены; labelled status чист.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.
 
 Следующий шаг `01-06` даст новый bundle без заранее названного symptom shape и

@@ -89,7 +89,7 @@
           "minutes": 45,
           "kind": "configure",
           "outcome": "Учащийся запускает разрешённую isolated Docker LAN, сохраняет baseline interfaces, MAC, IPv4 и link state, затем доказывает полный teardown.",
-          "done": "Preflight подтверждает exact Compose project, services, architecture и capabilities; evidence/baseline.md содержит observed interfaces, MAC, IPv4 и link state; evidence/post-check.md подтверждает teardown без затрагивания чужих Docker resources; network-evidence и agent review пройдены.",
+          "done": "Saved run-scoped preflight подтверждает local Docker unix endpoint, отсутствие subnet conflicts, нулевое initial state, exact labelled targets, Docker Engine/server architecture и pinned image; topology inspect доказывает isolation/exposure/capability invariants; evidence/baseline.md содержит observed interfaces, MAC, IPv4 и UP/LOWER_UP link state; raw post-check того же run подтверждает teardown без затрагивания чужих Docker resources; network-evidence и agent review пройдены.",
           "checks": [
             "network-evidence",
             "review"
@@ -97,7 +97,8 @@
           "evidence": {
             "produces": [
               "evidence/baseline.md",
-              "evidence/post-check.md"
+              "evidence/post-check.md",
+              "local ignored raw .training/evidence/01-02/<run-id>/"
             ],
             "verifiedBy": [
               "automated",
@@ -107,7 +108,6 @@
           },
           "requires": [
             "docker-basics",
-            "docker-compose-basics",
             "network-interface",
             "ipv4-address"
           ],
@@ -122,7 +122,10 @@
             "packet-capture",
             "arp-neighbor-resolution",
             "switch-forwarding"
-          ]
+          ],
+          "contentReview": {
+            "consistency": ["acceptance.md"]
+          }
         },
         {
           "id": "01-03",
@@ -167,7 +170,10 @@
           "defers": [
             "arp-neighbor-resolution",
             "switch-forwarding"
-          ]
+          ],
+          "contentReview": {
+            "consistency": ["acceptance.md"]
+          }
         },
         {
           "id": "01-04",
@@ -176,7 +182,7 @@
           "minutes": 55,
           "kind": "experiment",
           "outcome": "Учащийся по двум bounded live captures доказывает, как neighbor cache меняет ARP+ICMP sequence при cold и warm run.",
-          "done": "Expected записан до первого start marker; cache reset ограничен disposable sender; каждый run имеет отдельную local raw directory, provenance и hash; evidence/comparison.md ссылается на observed ARP и ICMP events и состояние neighbor cache; cleanup/post-check выполнены; network-evidence и review пройдены.",
+          "done": "Expected записан до первого start marker; preflight подтверждает local Docker unix endpoint и отсутствие subnet conflicts; cache reset ограничен disposable sender; каждый run имеет отдельную local raw directory, provenance и hash; evidence/comparison.md ссылается на advertised ARP MAC, Ethernet directions, matching ICMP events и состояние neighbor cache; cleanup/post-check выполнены; network-evidence и review пройдены.",
           "checks": [
             "network-evidence",
             "review"
@@ -211,7 +217,10 @@
             "cidr-prefix",
             "on-link-decision",
             "switch-forwarding"
-          ]
+          ],
+          "contentReview": {
+            "consistency": ["acceptance.md"]
+          }
         },
         {
           "id": "01-05",
@@ -249,7 +258,10 @@
           ],
           "defers": [
             "layered-diagnostic-method"
-          ]
+          ],
+          "contentReview": {
+            "consistency": ["acceptance.md"]
+          }
         },
         {
           "id": "01-06",
@@ -292,7 +304,10 @@
             "on-link-decision",
             "switch-forwarding",
             "routing-table"
-          ]
+          ],
+          "contentReview": {
+            "consistency": ["acceptance.md"]
+          }
         }
       ]
     },

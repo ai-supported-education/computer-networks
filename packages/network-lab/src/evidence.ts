@@ -19,21 +19,61 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
       relativePath: "evidence/baseline.md",
       headings: [
         /expected before action/i,
+        /initial state and preflight/i,
         /action start/i,
         /raw evidence reference/i,
+        /observed topology guardrails/i,
         /observed alpha/i,
         /observed beta/i,
         /inference and unknowns/i
       ],
-      references: [".training/evidence/01-02/"]
+      references: [
+        ".training/evidence/01-02/",
+        "preflight.json",
+        "events.jsonl",
+        "topology-inspect.json",
+        "baseline.txt"
+      ],
+      patterns: [
+        {
+          description: "нулевой initial labelled resource count",
+          pattern: /initial[\s\S]{0,300}(?:labelled_)?containers?\s*[:=]\s*0[\s\S]{0,120}(?:labelled_)?networks?\s*[:=]\s*0/i
+        },
+        {
+          description: "нулевой initial labelled volume count",
+          pattern: /(?:labelled_)?volumes?\s*[:=]\s*0/i
+        },
+        {
+          description: "local Docker unix endpoint",
+          pattern: /(?:(?:endpoint|dockerEndpoint)[\s\S]{0,160}unix:\/\/|unix:\/\/[\s\S]{0,160}(?:endpoint|dockerEndpoint))/i
+        },
+        {
+          description: "нулевой subnet conflict count",
+          pattern: /(?:subnet_conflicts|conflictCount)\s*["`]?\s*[:=]\s*0/i
+        },
+        {
+          description: "observed isolation/exposure guardrails",
+          pattern: /internal\s*[:=]\s*true[\s\S]{0,300}(?:published[_ -]?ports?|port bindings?)\s*[:=]\s*0/i
+        }
+      ]
     },
     {
       relativePath: "evidence/post-check.md",
-      headings: [/cleanup action/i, /observed status/i, /final state/i],
+      headings: [
+        /cleanup action/i,
+        /raw post-check evidence/i,
+        /observed status/i,
+        /final state/i
+      ],
+      references: [".training/evidence/01-02/", "post-check.txt"],
       patterns: [
         {
           description: "фактический clean resource count",
           pattern: /(?:containers?|контейнер\w*)\s*[:=]\s*0[\s\S]{0,100}(?:networks?|сет\w*)\s*[:=]\s*0/i
+        },
+        {
+          description: "фактический clean volume count",
+          pattern: /volumes?\s*[:=]\s*0/i
         }
       ]
     }
@@ -48,7 +88,8 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         /frame 2 observations/i,
         /frame 2 boundary arithmetic/i,
         /^inference$/i,
-        /unknowns and applicability limits/i
+        /unknowns and applicability limits/i,
+        /offline inspector cleanup/i
       ],
       references: [
         "fixtures/01-03/known-neighbour.pcap",
@@ -62,6 +103,12 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         {
           description: "captured frame length с единицами",
           pattern: /\b74\s*(?:bytes?|байт(?:а|ов)?)\b/i
+        },
+        { description: "frame 1 citation", pattern: /\bframe\s*(?:number\s*)?#?1\b/i },
+        { description: "frame 2 citation", pattern: /\bframe\s*(?:number\s*)?#?2\b/i },
+        {
+          description: "offline cleanup marker",
+          pattern: /exact_container_absent\s*=\s*true/i
         }
       ]
     }
@@ -74,13 +121,31 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         /cold prediction/i,
         /warm prediction/i,
         /action start and raw evidence/i,
+        /preflight and topology evidence/i,
         /cold observations/i,
         /warm observations/i,
         /comparison and inference/i,
         /alternative explanations and variable fields/i,
         /cleanup and post-check/i
       ],
-      references: [".training/evidence/01-04/"],
+      references: [
+        ".training/evidence/01-04/",
+        "preflight.json",
+        "topology-inspect.json",
+        "baseline.txt",
+        "events.jsonl",
+        "cold/neighbor-before.txt",
+        "cold/neighbor-after.txt",
+        "cold/capture.pcap",
+        "cold/capture.sha256.txt",
+        "cold/events.tsv",
+        "warm/neighbor-before.txt",
+        "warm/neighbor-after.txt",
+        "warm/capture.pcap",
+        "warm/capture.sha256.txt",
+        "warm/events.tsv",
+        "post-check.txt"
+      ],
       patterns: [
         {
           description: "ссылки на raw pcap",
@@ -89,6 +154,34 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         {
           description: "neighbor evidence",
           pattern: /neighbou?r|сосед/i
+        },
+        {
+          description: "ARP и ICMP evidence",
+          pattern: /ARP[\s\S]{0,500}ICMP/i
+        },
+        {
+          description: "matching Echo identifier/sequence",
+          pattern: /(?:ident(?:ifier)?|icmp\.ident)[\s\S]{0,120}(?:seq(?:uence)?|icmp\.seq)/i
+        },
+        {
+          description: "advertised beta MAC mapping",
+          pattern: /(?:arp\.src\.hw_mac|advertis\w*|реклам\w*)[\s\S]{0,160}02:42:ac:1e:00:14/i
+        },
+        {
+          description: "local Docker unix endpoint",
+          pattern: /(?:(?:endpoint|dockerEndpoint)[\s\S]{0,160}unix:\/\/|unix:\/\/[\s\S]{0,160}(?:endpoint|dockerEndpoint))/i
+        },
+        {
+          description: "нулевой subnet conflict count",
+          pattern: /(?:subnet_conflicts|conflictCount)\s*["`]?\s*[:=]\s*0/i
+        },
+        {
+          description: "фактический clean resource count",
+          pattern: /(?:containers?|контейнер\w*)\s*[:=]\s*0[\s\S]{0,100}(?:networks?|сет\w*)\s*[:=]\s*0/i
+        },
+        {
+          description: "фактический clean volume count",
+          pattern: /volumes?\s*[:=]\s*0/i
         }
       ]
     }
@@ -100,12 +193,19 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         /case a.+interface-not-ready/i,
         /case b.+arp-no-reply/i,
         /case c.+icmp-no-reply/i,
-        /cross-case comparison/i
+        /cross-case comparison/i,
+        /offline inspector cleanup/i
       ],
       references: [
         "fixtures/01-05/interface-not-ready/",
         "fixtures/01-05/arp-no-reply/",
         "fixtures/01-05/icmp-no-reply/"
+      ],
+      patterns: [
+        {
+          description: "offline cleanup markers для трёх inspect runs",
+          pattern: /exact_container_absent\s*=\s*true/i
+        }
       ]
     }
   ],
@@ -125,14 +225,21 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         /final bounded conclusion/i,
         /cleanup status/i
       ],
-      references: ["fixtures/01-06/novel-local-exchange.pcap"],
+      references: [
+        "fixtures/01-06/novel-local-exchange.pcap",
+        "fixtures/01-06/novel-local-exchange.baseline.txt"
+      ],
       patterns: [
         { description: "frame 1 citation", pattern: /\bframe\s*(?:number\s*)?#?1\b/i },
         { description: "frame 2 citation", pattern: /\bframe\s*(?:number\s*)?#?2\b/i },
         { description: "frame 3 citation", pattern: /\bframe\s*(?:number\s*)?#?3\b/i },
         { description: "frame 4 citation", pattern: /\bframe\s*(?:number\s*)?#?4\b/i },
         { description: "frame 5 citation", pattern: /\bframe\s*(?:number\s*)?#?5\b/i },
-        { description: "frame 6 citation", pattern: /\bframe\s*(?:number\s*)?#?6\b/i }
+        { description: "frame 6 citation", pattern: /\bframe\s*(?:number\s*)?#?6\b/i },
+        {
+          description: "offline cleanup marker",
+          pattern: /exact_container_absent\s*=\s*true/i
+        }
       ]
     }
   ]
@@ -156,6 +263,7 @@ export async function validateNetworkEvidence(
   }
 
   const failures: string[] = [];
+  const sources = new Map<string, string>();
   for (const rule of rules) {
     const absolute = path.join(sessionDirectory, rule.relativePath);
     const metadata = await lstat(absolute).catch(() => null);
@@ -166,6 +274,7 @@ export async function validateNetworkEvidence(
       continue;
     }
     const markdown = await readFile(absolute, "utf8");
+    sources.set(rule.relativePath, markdown);
     if (PLACEHOLDER.test(markdown)) {
       failures.push(`${rule.relativePath}: остался TODO/placeholder.`);
     }
@@ -201,7 +310,25 @@ export async function validateNetworkEvidence(
 
     if (sessionId === "01-05") {
       validateDiagnosticCases(rule.relativePath, sections, failures);
+      const cleanupMarkers = markdown.match(
+        /exact_container_absent\s*=\s*true/gi
+      )?.length ?? 0;
+      if (cleanupMarkers < 3) {
+        failures.push(
+          `${rule.relativePath}: нужны три фактических offline cleanup marker, найдено ${cleanupMarkers}.`
+        );
+      }
     }
+    if (sessionId === "01-06") {
+      validateMeaningfulUnknowns(rule.relativePath, sections, failures, 3);
+    }
+  }
+
+  if (sessionId === "01-02") {
+    validateBaselineLifecycle(sources, failures);
+  }
+  if (sessionId === "01-04") {
+    validateCaptureLifecycle(sources, failures);
   }
 
   if (failures.length > 0) {
@@ -213,6 +340,113 @@ export async function validateNetworkEvidence(
       `network-evidence PASS: ${rules.map((rule) => rule.relativePath).join(", ")}`
     ]
   };
+}
+
+function validateBaselineLifecycle(
+  sources: ReadonlyMap<string, string>,
+  failures: string[]
+): void {
+  const baseline = sources.get("evidence/baseline.md");
+  const postCheck = sources.get("evidence/post-check.md");
+  if (!baseline || !postCheck) return;
+
+  const baselineSections = parseSections(baseline);
+  const postSections = parseSections(postCheck);
+  const expectedAt = timestampInSection(
+    baselineSections,
+    /expected before action/i
+  );
+  const actionAt = timestampInSection(baselineSections, /action start/i);
+  const cleanupAt = timestampInSection(postSections, /cleanup action/i);
+  if (!expectedAt) {
+    failures.push("evidence/baseline.md: Expected section не содержит ISO UTC timestamp.");
+  }
+  if (!actionAt) {
+    failures.push("evidence/baseline.md: Action start не содержит ISO UTC timestamp.");
+  }
+  if (!cleanupAt) {
+    failures.push("evidence/post-check.md: Cleanup action не содержит ISO UTC timestamp.");
+  }
+  if (expectedAt && actionAt && expectedAt >= actionAt) {
+    failures.push("evidence/baseline.md: Expected timestamp должен быть раньше action start.");
+  }
+  if (actionAt && cleanupAt && actionAt >= cleanupAt) {
+    failures.push("evidence/post-check.md: Cleanup timestamp должен быть позже action start.");
+  }
+
+  const baselineRuns = extractRunIds(baseline, "01-02");
+  const postCheckRuns = extractRunIds(postCheck, "01-02");
+  const allRuns = new Set([...baselineRuns, ...postCheckRuns]);
+  if (baselineRuns.size !== 1 || postCheckRuns.size !== 1 || allRuns.size !== 1) {
+    failures.push(
+      "01-02 evidence: baseline и post-check должны ссылаться на один exact unique run id."
+    );
+  }
+  const upCount = baseline.match(/\bUP\b/g)?.length ?? 0;
+  const lowerUpCount = baseline.match(/\bLOWER_UP\b/g)?.length ?? 0;
+  if (upCount < 2 || lowerUpCount < 2) {
+    failures.push(
+      "evidence/baseline.md: для alpha и beta нужны observed UP и LOWER_UP flags."
+    );
+  }
+}
+
+function validateCaptureLifecycle(
+  sources: ReadonlyMap<string, string>,
+  failures: string[]
+): void {
+  const comparison = sources.get("evidence/comparison.md");
+  if (!comparison) return;
+  const sections = parseSections(comparison);
+  const expectedAt = timestampInSection(sections, /expected before action/i);
+  const actionAt = timestampInSection(sections, /action start and raw evidence/i);
+  const cleanupAt = timestampInSection(sections, /cleanup and post-check/i);
+  if (!expectedAt) {
+    failures.push("evidence/comparison.md: Expected section не содержит ISO UTC timestamp.");
+  }
+  if (!actionAt) {
+    failures.push("evidence/comparison.md: Action start не содержит ISO UTC timestamp.");
+  }
+  if (!cleanupAt) {
+    failures.push("evidence/comparison.md: Cleanup section не содержит ISO UTC timestamp.");
+  }
+  if (expectedAt && actionAt && expectedAt >= actionAt) {
+    failures.push("evidence/comparison.md: Expected timestamp должен быть раньше action start.");
+  }
+  if (actionAt && cleanupAt && actionAt >= cleanupAt) {
+    failures.push("evidence/comparison.md: Cleanup timestamp должен быть позже action start.");
+  }
+  if (extractRunIds(comparison, "01-04").size !== 1) {
+    failures.push("evidence/comparison.md: все raw references должны использовать один exact 01-04 run id.");
+  }
+  const hashes = comparison.match(/\b[a-f0-9]{64}\b/gi) ?? [];
+  if (hashes.length < 2) {
+    failures.push("evidence/comparison.md: нужны observed SHA-256 для cold и warm pcap.");
+  }
+}
+
+function timestampInSection(
+  sections: readonly MarkdownSection[],
+  heading: RegExp
+): number | null {
+  const body = sections.find((section) => heading.test(section.heading))?.body;
+  const value = body?.match(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z\b/)?.[0];
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractRunIds(source: string, sessionId: string): Set<string> {
+  const escapedSessionId = sessionId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `\\.training/evidence/${escapedSessionId}/([A-Za-z0-9-]+)/`,
+    "g"
+  );
+  return new Set(
+    [...source.matchAll(pattern)]
+      .map((match) => match[1])
+      .filter((value): value is string => Boolean(value))
+  );
 }
 
 interface MarkdownSection {
@@ -278,6 +512,44 @@ function validateDiagnosticCases(
         );
       }
     }
+    const inputs = nested.find((candidate) =>
+      /verified inputs and observations/i.test(candidate.heading)
+    )?.body ?? "";
+    const caseId = caseHeading.source.match(
+      /(interface-not-ready|arp-no-reply|icmp-no-reply)/
+    )?.[1];
+    if (
+      !caseId ||
+      !new RegExp(
+        `fixtures/01-05/${caseId}/(?:baseline\\.txt|action\\.txt|events\\.tsv|capture\\.pcap|provenance\\.md|sha256\\.txt)`,
+        "i"
+      ).test(inputs)
+    ) {
+      failures.push(
+        `${relativePath}: ${section.heading} не содержит точную file evidence citation.`
+      );
+    }
+    validateMeaningfulUnknowns(relativePath, nested, failures, 2, section.heading);
+  }
+}
+
+function validateMeaningfulUnknowns(
+  relativePath: string,
+  sections: readonly MarkdownSection[],
+  failures: string[],
+  minimum: number,
+  context = "artifact"
+): void {
+  const body = sections.find((candidate) =>
+    /^(?:remaining )?unknowns(?: and applicability limits)?$/i.test(
+      candidate.heading
+    )
+  )?.body;
+  const items = body?.match(/^\s*[-*]\s+\S.+$/gm) ?? [];
+  if (items.length < minimum) {
+    failures.push(
+      `${relativePath}: ${context} должен перечислить минимум ${minimum} отдельных unknowns.`
+    );
   }
 }
 

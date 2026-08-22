@@ -65,3 +65,33 @@ frame=21 eth.type=0x0806 arp.opcode=1
 - B. У frame 21 другой Ethernet destination, которого здесь не показали.
 - C. EtherType frame 21 обозначает другой payload, поэтому IPv4/ICMP headers в нём не заявлены.
 - D. Любой ARP frame всегда повреждён.
+
+## q5 — к каким endpoints относятся source и destination
+
+Capture point задан явно: `alpha:eth0`, direction — incoming. Inventory:
+
+```text
+alpha: MAC 02:42:ac:1e:00:0a, IPv4 172.30.0.10
+beta:  MAC 02:42:ac:1e:00:14, IPv4 172.30.0.20
+
+eth.src=02:42:ac:1e:00:14 eth.dst=02:42:ac:1e:00:0a
+ip.src=172.30.0.20 ip.dst=172.30.0.10 icmp.type=0
+```
+
+Какое описание направления соответствует обоим headers?
+
+- A. MAC-пара направлена от `alpha` к `beta`, а IPv4-пара — от `beta` к `alpha`.
+- B. Source и destination можно определить только по номеру interface.
+- C. И Ethernet, и IPv4 headers направлены от `beta` к `alpha`; это наблюдаемый incoming Echo Reply.
+- D. В reply source/destination всегда остаются такими же, как в request.
+
+## q6 — в каком порядке читаются headers при приёме
+
+`beta:eth0` получает frame с `eth.type=0x0800`, затем decoder показывает
+`ip.proto=1` и `icmp.type=8`. Какой порядок обработки соответствует
+decapsulation в рамках этой модели?
+
+- A. Сначала ICMP выбирает interface, затем IPv4 создаёт Ethernet header.
+- B. MAC превращается в IPv4, а IPv4 — в ICMP type.
+- C. Interface получает frame; Ethernet сообщает про IPv4 payload; IPv4 сообщает про ICMP payload; затем читается ICMP message.
+- D. Все три headers читаются как независимые packets в произвольном порядке.

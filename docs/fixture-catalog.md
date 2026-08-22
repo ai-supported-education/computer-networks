@@ -79,6 +79,8 @@ action.txt и derived events.tsv. Таблицы перечисляют observed
 - Path: fixtures/01-06/novel-local-exchange.pcap
 - SHA-256: e8e22341c995edf8fb1ad045d5fd089d3130490e5a506b85889b2a9ada3f4ddd
 - Provenance: fixtures/01-06/novel-local-exchange.provenance.md
+- Baseline: fixtures/01-06/novel-local-exchange.baseline.txt (`alpha:eth0`
+  `UP LOWER_UP`, fixed MAC/IPv4, beta neighbor entry absent).
 - Canonical text: fixtures/01-06/novel-local-exchange.txt
 - Supplied assumption: both endpoints belong to one local Ethernet LAN.
 - Capture model: source namespace, ARP and IPv4/ICMP, six-frame ceiling.

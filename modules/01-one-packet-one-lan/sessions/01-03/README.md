@@ -98,11 +98,16 @@ Source/destination pairs поменялись местами, а ICMP type ст�
 
 ## Процедура
 
-1. Проверьте local image/preflight без создания topology:
+1. Проверьте offline inspector без создания topology:
 
    ```bash
-   pnpm network:lab preflight
+   pnpm network:fixture preflight
    ```
+
+   Он допускает только local absolute `unix://` Docker endpoint, Linux
+   amd64/arm64 и уже загруженный pinned image. Если отсутствует только image,
+   выполните `pnpm network:fixture preload`, затем повторите preflight. Remote
+   context — stop condition.
 
 2. Проверьте provenance/hash и извлеките canonical поля в offline container:
 
@@ -111,11 +116,21 @@ Source/destination pairs поменялись местами, а ICMP type ст�
    pnpm network:fixture inspect fixtures/01-03/known-neighbour.pcap
    ```
 
-   Runner использует `--network none`, read-only mount и `--pull never`.
+   Runner использует `--network none`, `cap-drop=ALL`, `no-new-privileges`,
+   bounded CPU/memory/PIDs и `--pull never`; verified fixture копируется exact
+   `docker cp` в disposable container filesystem, без host bind mount. Writable
+   disposable rootfs нужен только parser container и удаляется до PASS.
+   Команда считается успешной только если exact offline container удалён и output
+   заканчивается `exact_container_absent=true`. При `Fixture cleanup FAILED`
+   остановитесь; используйте напечатанный ID только с
+   `pnpm network:fixture cleanup <exact-container-id>`, затем проверьте
+   `pnpm network:lab status`. Недоступный daemon или permission error не считается
+   доказательством отсутствия container и блокирует cleanup PASS.
 3. Заполните `frame-map.md` своими observed values. Для каждого из двух frames
    укажите field → protocol unit → что поле доказывает.
 4. Выполните два arithmetic sanity checks: IPv4 length и full captured length.
 5. Отдельно напишите inference и минимум два unknown/ограничения.
+6. Перенесите cleanup marker в `frame-map.md` и подтвердите чистый labelled status.
 
 Остановитесь, если hash отличается, fixture не synthetic по provenance, команда
 просит network access или TShark показывает не два frames. Не «чините» pcap и не
@@ -124,7 +139,8 @@ Source/destination pairs поменялись местами, а ICMP type ст�
 ## Проверка и evidence
 
 - Local: `network-evidence` проверяет sections, оба frame id, числа с единицами,
-  hash и отсутствие TODO. Он не оценивает свободный inference как эталонную строку.
+  hash, exact cleanup marker и отсутствие TODO. Он не оценивает свободный inference
+  как эталонную строку.
 - Empirical: hash и fields получены запуском offline TShark над fixture.
 - Agent: проверяет связь каждого inference с cited fields, арифметику и границы
   применимости.
@@ -136,6 +152,7 @@ Source/destination pairs поменялись местами, а ICMP type ст�
 - [ ] Оба frames разобраны на Ethernet, IPv4 и ICMP по фактическим fields.
 - [ ] Два расчёта lengths имеют единицы и сходятся для fixture.
 - [ ] Observations, inference и unknowns разделены.
+- [ ] Offline inspect сообщил `exact_container_absent=true`; labelled status чист.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.
 
 Следующий шаг `01-04` проверит, что происходит до Echo Request при пустом neighbor

@@ -49,6 +49,14 @@ describe("network evidence artifact contract", () => {
         "network-evidence PASS: evidence/baseline.md, evidence/post-check.md"
       ]
     });
+
+    await writeFile(
+      path.join(root, "evidence", "post-check.md"),
+      postCheck("run-b")
+    );
+    const mixedRuns = await validateNetworkEvidence(root, "01-02");
+    expect(mixedRuns.ok).toBe(false);
+    expect(mixedRuns.messages.join("\n")).toContain("один exact unique run id");
   });
 
   it("fails closed for an unsupported session id", async () => {
@@ -73,38 +81,48 @@ describe("network evidence artifact contract", () => {
 
 });
 
-function baseline(expected: string): string {
+function baseline(expected: string, runId = "run-a"): string {
   return `# Baseline
 
 ## Expected before action
 ${expected}
 
+## Initial state and preflight
+At .training/evidence/01-02/${runId}/preflight.json the Docker endpoint=unix:///var/run/docker.sock, networkInventory conflictCount=0, initial labelled_containers=0, labelled_networks=0 and labelled_volumes=0 for exact targets.
+
 ## Action start
-The bounded action started at 2026-08-23T00:01:00Z.
+The bounded action started at 2026-08-23T00:01:00Z in .training/evidence/01-02/${runId}/events.jsonl.
 
 ## Raw evidence reference
-Observed data: .training/evidence/01-02/run-a/baseline.txt
+Observed data: .training/evidence/01-02/${runId}/preflight.json, .training/evidence/01-02/${runId}/events.jsonl, .training/evidence/01-02/${runId}/topology-inspect.json and .training/evidence/01-02/${runId}/baseline.txt.
+
+## Observed topology guardrails
+The normalized observation records internal=true and published_ports=0 with no added endpoint capabilities.
 
 ## Observed alpha
-The raw record contains interface, link, MAC and IPv4 fields for alpha.
+The raw record contains interface eth0, flags UP and LOWER_UP, MAC and IPv4 fields for alpha.
 
 ## Observed beta
-The raw record contains interface, link, MAC and IPv4 fields for beta.
+The raw record contains interface eth0, flags UP and LOWER_UP, MAC and IPv4 fields for beta.
 
 ## Inference and unknowns
 The inventory is consistent; behaviour outside this namespace remains unknown.
 `;
 }
 
-function postCheck(): string {
+function postCheck(runId = "run-a"): string {
   return `# Post-check
 
 ## Cleanup action
 Exact-ID cleanup completed at 2026-08-23T00:02:00Z.
 
+## Raw post-check evidence
+Observed method and owner label: .training/evidence/01-02/${runId}/post-check.txt
+
 ## Observed status
 containers: 0
 networks: 0
+volumes: 0
 
 ## Final state
 All course-labelled resources are absent after cleanup.
@@ -133,7 +151,11 @@ This independent check also gives 60 bytes and 74 bytes for this fixture.
 The ordered records are consistent with one bounded synthetic exchange.
 
 ## Unknowns and applicability limits
-Live kernel processing and traffic outside the capture remain unknown.
+- Live kernel processing remains unknown.
+- Traffic outside the capture remains unknown.
+
+## Offline inspector cleanup
+exact_container_absent=true; final labelled status is clean.
 `;
 }
 
@@ -141,7 +163,7 @@ function completedComparison(): string {
   return `# Comparison
 
 ## Expected before action
-Predictions were recorded before either bounded action started.
+Predictions were recorded at 2026-08-23T00:00:00Z before either bounded action started.
 
 ### Cold prediction
 The first bounded timeline may require neighbour resolution before Echo.
@@ -150,13 +172,16 @@ The first bounded timeline may require neighbour resolution before Echo.
 The second bounded timeline may reuse an observed neighbour entry.
 
 ## Action start and raw evidence
-UTC markers and raw files are under .training/evidence/01-04/run-a/.
+The action started at 2026-08-23T00:01:00Z; markers are in .training/evidence/01-04/run-a/events.jsonl.
+
+## Preflight and topology evidence
+.training/evidence/01-04/run-a/preflight.json records endpoint=unix:///var/run/docker.sock and networkInventory conflictCount=0; topology-inspect.json and baseline.txt prove the exact bounded topology.
 
 ## Cold observations
-Cold neighbor-before/after evidence cites cold/capture.pcap and cold/events.tsv.
+Cold ARP then ICMP observations cite .training/evidence/01-04/run-a/cold/neighbor-before.txt, cold/neighbor-after.txt, cold/capture.pcap, cold/capture.sha256.txt and cold/events.tsv. The ARP reply arp.src.hw_mac advertises 02:42:ac:1e:00:14. SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; matching identifier 7 sequence 1.
 
 ## Warm observations
-Warm neighbor-before/after evidence cites warm/capture.pcap and warm/events.tsv.
+Warm ICMP observations cite .training/evidence/01-04/run-a/warm/neighbor-before.txt, warm/neighbor-after.txt, warm/capture.pcap, warm/capture.sha256.txt and warm/events.tsv. SHA bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; matching identifier 8 sequence 2.
 
 ## Comparison and inference
 The comparison separates captured observations from the bounded inference.
@@ -165,7 +190,7 @@ The comparison separates captured observations from the bounded inference.
 Capture timing is an alternative; timestamps, IDs and checksums are variable.
 
 ## Cleanup and post-check
-Exact cleanup completed and the final status reported zero labelled resources.
+Exact cleanup completed at 2026-08-23T00:02:00Z; .training/evidence/01-04/run-a/post-check.txt reports containers=0, networks=0 and volumes=0.
 `;
 }
 
@@ -173,7 +198,7 @@ function completedDiagnosis(): string {
   const section = (title: string, fixture: string) => `## ${title}
 
 ### Verified inputs and observations
-Hash and provenance checked at ${fixture}; citations identify bounded records.
+Hash and provenance checked at ${fixture}baseline.txt:1 and ${fixture}events.tsv:2; citations identify bounded records.
 
 ### Last proven stage
 The last stage is stated from the cited observed record only.
@@ -185,7 +210,8 @@ The earliest unsupported transition is separated from later unknown stages.
 The inference localises an evidence boundary without asserting root cause.
 
 ### Remaining unknowns
-Endpoint internals and capture behaviour outside the window remain unknown.
+- Endpoint internals remain unknown.
+- Capture behaviour outside the window remains unknown.
 
 ### Next discriminating observation
 A bounded read-only observation is proposed without running another probe.
@@ -199,7 +225,8 @@ A bounded read-only observation is proposed without running another probe.
     ) +
     section("Case B - arp-no-reply", "fixtures/01-05/arp-no-reply/") +
     section("Case C - icmp-no-reply", "fixtures/01-05/icmp-no-reply/") +
-    "## Cross-case comparison\nThe shared high-level symptom does not erase the different observed boundaries.\n"
+    "## Cross-case comparison\nThe shared high-level symptom does not erase the different observed boundaries.\n\n" +
+    "## Offline inspector cleanup\nexact_container_absent=true for case A.\nexact_container_absent=true for case B.\nexact_container_absent=true for case C.\n"
   );
 }
 
@@ -207,7 +234,7 @@ function completedPacketPath(): string {
   return `# Packet path
 
 ## Fixture identity and provenance
-Verified fixtures/01-06/novel-local-exchange.pcap against its synthetic provenance and hash.
+Verified fixtures/01-06/novel-local-exchange.pcap and fixtures/01-06/novel-local-exchange.baseline.txt against synthetic provenance and hash.
 
 ## Source facts
 Fixed endpoint inventory and capture bounds come from versioned provenance.
@@ -233,7 +260,9 @@ Only extracted Ethernet, ARP, IPv4 and ICMP fields are listed here.
 The conclusion combines supplied facts and observed ordering within this fixture.
 
 ## Unknowns
-Kernel internals, route lookup and events outside the window remain unknown.
+- Kernel internals remain unknown.
+- Route lookup remains unknown.
+- Events outside the window remain unknown.
 
 ## Counterfactual
 A missing reverse record with the same identifiers would contradict completeness.
@@ -242,6 +271,6 @@ A missing reverse record with the same identifiers would contradict completeness
 The six records support only a bounded conclusion for this synthetic LAN.
 
 ## Cleanup status
-Offline inspection ended with containers: 0 and networks: 0.
+Offline inspection ended with exact_container_absent=true, containers: 0 and networks: 0.
 `;
 }

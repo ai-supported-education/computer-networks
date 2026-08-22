@@ -3,15 +3,22 @@
 ## Invariants для PASS
 
 - Expected имеет timestamp/явно записан до action start.
-- Preflight подтверждён; targets ограничены `cn-alpha`, `cn-beta` и course-labelled
-  isolated network.
+- Saved preflight того же run подтверждает effective local `unix://` endpoint,
+  rootful Docker Engine/server architecture, `networkInventory.conflictCount=0`,
+  initial labelled counts `0/0/0`, pinned image ID, owner label и exact targets
+  `cn-lab`, `cn-alpha`, `cn-beta`.
+- Normalized topology inspect доказывает internal isolated network, exact fixed
+  endpoints, отсутствие published ports, mounts и added endpoint capabilities.
 - Для обоих endpoints cited raw evidence содержит interface, link state, MAC и
   IPv4; summary не подменяет отсутствующие значения ожиданиями.
 - Raw run directory уникален и не перезаписывает предыдущую попытку.
-- Post-check выполнен после cleanup и показывает отсутствие lab resources либо
+- Raw post-check того же run выполнен после cleanup и показывает ноль labelled
+  containers, networks и volumes либо
   честно фиксирует неуспешный cleanup (в последнем случае PASS невозможен до
   безопасного завершения).
-- `network-evidence` PASS и evidence достаточно для независимой сверки.
+- Expected/action/cleanup timestamps упорядочены; failed attempts перечислены и не
+  перезаписаны тихо.
+- `network-evidence` PASS и raw references достаточно для независимой сверки.
 
 ## Valid alternatives
 
@@ -24,7 +31,8 @@
 
 Agent сопоставляет summary с raw output, но не повторяет опасные действия.
 Published ports, host network, Docker socket, privileged container, произвольные
-targets или оставленные resources блокируют PASS.
+targets, продолжение после runtime discrepancy или оставленные resources
+блокируют PASS.
 
 ## Optional improvements
 

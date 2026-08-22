@@ -1,0 +1,6 @@
+recorded_at=2024-01-01T00:20:00.000Z
+capture_point=alpha:eth0
+eth0_state=UP LOWER_UP
+mac=02:42:ac:1e:00:0a
+ipv4=172.30.0.10
+neighbor_172.30.0.20=absent

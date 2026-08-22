@@ -5,8 +5,8 @@
 ## Результат и границы
 
 Вы получите новый synthetic evidence bundle
-`fixtures/01-06/novel-local-exchange.pcap` и восстановите причинный путь exchange
-в `packet-path.md`: от исходного interface state через link-layer delivery и
+`fixtures/01-06/novel-local-exchange.pcap` вместе с versioned baseline companion и
+восстановите причинный путь exchange в `packet-path.md`: от исходного interface state через link-layer delivery и
 neighbor evidence до IPv4/ICMP messages и обратно.
 
 Это интеграция главы, а не проверка памяти на названия. Для каждого шага нужно
@@ -88,31 +88,36 @@ reply. Expected и observed остаются разными.
 
 ## Процедура
 
-1. Проверьте identity/provenance и получите normalized view offline:
+1. Выполните `pnpm network:fixture preflight`. Продолжайте только после PASS для
+   local `unix://` endpoint и pinned image; при missing image используйте
+   `pnpm network:fixture preload` и повторите preflight.
+2. Проверьте identity/provenance и получите normalized view offline:
 
    ```bash
    pnpm network:fixture verify fixtures/01-06/novel-local-exchange.pcap
    pnpm network:fixture inspect fixtures/01-06/novel-local-exchange.pcap
    ```
 
-   Остановитесь при hash mismatch, неизвестном origin, неожиданном network access
-   или расхождении raw/companion. Fixture не изменяйте.
-2. Не заглядывая в hints/solution, составьте в `packet-path.md` inventory всех
+   Остановитесь при hash mismatch, неизвестном origin, неожиданном network access,
+   cleanup без `exact_container_absent=true` или расхождении raw/companion. Fixture
+   не изменяйте. При cleanup failure используйте только exact-ID recovery из 01-05.
+3. Не заглядывая в hints/solution, составьте в `packet-path.md` inventory всех
    frames: number, relative order, Ethernet src/dst/type, IPv4 src/dst/protocol или
    ARP fields, ICMP type там, где он действительно присутствует.
-3. Сгруппируйте frames в причинные stages. Для каждой стрелки укажите cited
+4. Сгруппируйте frames в причинные stages. Для каждой стрелки укажите cited
    observation; совпавший порядок сам по себе не доказывает внутреннюю причину.
-4. Заполните epistemic ledger:
+5. Заполните epistemic ledger:
    - source facts;
    - assumptions;
    - observations;
    - inferences;
    - минимум три unknowns.
-5. Дайте итог одной фразой, область применимости и один counterfactual: какое
+6. Дайте итог одной фразой, область применимости и один counterfactual: какое
    изменение evidence опровергло бы ваш основной inference.
 
-Live Docker topology не создаётся, поэтому cleanup состоит в проверке, что offline
-runner завершился и не оставил containers/networks:
+Live topology не создаётся, но offline inspector использует disposable container.
+Сохраните его `exact_container_absent=true`, затем проверьте, что labelled resources
+не остались:
 
 ```bash
 pnpm network:lab status
@@ -121,7 +126,8 @@ pnpm network:lab status
 ## Проверка и evidence
 
 - Local: `network-evidence` проверяет fixture identity, inventory всех frames,
-  обязательные stages/ledger/counterfactual, cleanup и отсутствие TODO.
+  обязательные sections/frame references, cleanup marker и отсутствие TODO.
+  Корректность causal arrows/ledger/counterfactual проверяет agent.
 - Empirical: TShark фактически читает versioned synthetic pcap offline.
 - Agent: проверяет причинную связность, соответствие fields, epistemic labels,
   counterfactual и соблюдение границы главы.
@@ -129,13 +135,15 @@ pnpm network:lab status
 
 ## DONE
 
-- [ ] Fixture hash/provenance проверены; все observed frames отражены в inventory.
+- [ ] Fixture hash/provenance и versioned `alpha:eth0` baseline проверены; все
+      observed frames отражены в inventory.
 - [ ] Каждая causal arrow ссылается на конкретное observation.
 - [ ] Source facts, assumptions, observations, inferences и минимум три unknowns
       разделены.
 - [ ] Итог ограничен данной LAN/fixture; CIDR/route/gateway не выданы за доказанные.
 - [ ] Counterfactual действительно мог бы опровергнуть inference.
-- [ ] Offline cleanup/status чист; `pnpm session:check` и agent review PASS.
+- [ ] Offline cleanup содержит `exact_container_absent=true`, labelled status чист;
+      `pnpm session:check` и agent review PASS.
 
 Глава завершена. Следующая опубликованная в будущем карточка начнёт вывод IPv4
 addressing и CIDR; продолжать её сейчас для DONE не требуется.

@@ -11,6 +11,7 @@
 - Отмечено, что FCS отсутствует в capture и что расчёт не универсален для VLAN,
   options или иных capture условий.
 - Observations отделены от inference; названы минимум два unknown/ограничения.
+- Inspect output содержит `exact_container_absent=true`, final labelled status чист.
 
 ## Valid alternatives
 
@@ -21,9 +22,9 @@
 
 ## Evidence and safety
 
-Анализ только offline, `--network none`; изменённый fixture или несовпавший hash
-блокирует PASS. Agent не считает пример output наблюдением учащегося без фактической
-идентификации файла.
+Анализ только offline, через local `unix://` Docker endpoint, `--network none` и
+без host bind mount; изменённый fixture или несовпавший hash блокирует PASS. Agent
+не считает пример output наблюдением учащегося без фактической идентификации файла.
 
 ## Optional improvements
 

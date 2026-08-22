@@ -13,6 +13,10 @@ import {
 } from "./constants.js";
 import { runCommand, tryCommand } from "./command.js";
 import {
+  isNoSuchDockerObject,
+  requireLocalDockerEndpoint
+} from "./docker-safety.js";
+import {
   buildArpFrame,
   buildIcmpEchoFrame,
   createClassicPcap,
@@ -195,6 +199,105 @@ export async function verifyFixtures(
   return verified;
 }
 
+export async function preflightFixtureInspector(): Promise<string> {
+  const endpoint = await requireLocalDockerEndpoint();
+  const version = await runCommand(
+    "docker",
+    ["version", "--format", "{{json .Server}}"],
+    { timeoutMs: 10_000 }
+  );
+  const server = JSON.parse(version.stdout) as {
+    Version?: string;
+    Os?: string;
+    Arch?: string;
+  };
+  if (
+    !server.Version ||
+    server.Os !== "linux" ||
+    !server.Arch ||
+    !["amd64", "arm64"].includes(server.Arch)
+  ) {
+    throw new Error(
+      `Offline inspector требует Docker Linux amd64/arm64; observed ${server.Os ?? "unknown"}/${server.Arch ?? "unknown"}.`
+    );
+  }
+  const image = await runCommand(
+    "docker",
+    ["image", "inspect", LAB_IMAGE, "--format", "{{.Id}}"],
+    { timeoutMs: 10_000 }
+  ).catch(() => {
+    throw new Error(
+      "Pinned image не загружен. Выполните pnpm network:fixture preload, затем повторите preflight."
+    );
+  });
+  if (!/^sha256:[a-f0-9]{64}$/.test(image.stdout.trim())) {
+    throw new Error(`Неожиданный local image ID: ${image.stdout.trim()}`);
+  }
+  const existing = await runCommand(
+    "docker",
+    [
+      "container",
+      "ls",
+      "-a",
+      "--filter",
+      `label=${LAB_LABEL_KEY}=${LAB_OWNER_LABEL}`,
+      "--format",
+      "{{.ID}}\t{{.Names}}\t{{.Status}}"
+    ],
+    { timeoutMs: 10_000 }
+  );
+  const labelledContainers = existing.stdout
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0);
+  const networks = await runCommand(
+    "docker",
+    [
+      "network",
+      "ls",
+      "--filter",
+      `label=${LAB_LABEL_KEY}=${LAB_OWNER_LABEL}`,
+      "--format",
+      "{{.ID}}\t{{.Name}}"
+    ],
+    { timeoutMs: 10_000 }
+  );
+  const volumes = await runCommand(
+    "docker",
+    [
+      "volume",
+      "ls",
+      "--filter",
+      `label=${LAB_LABEL_KEY}=${LAB_OWNER_LABEL}`,
+      "--format",
+      "{{.Name}}"
+    ],
+    { timeoutMs: 10_000 }
+  );
+  const labelledNetworks = networks.stdout
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0);
+  const labelledVolumes = volumes.stdout
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0);
+  if (
+    labelledContainers.length > 0 ||
+    labelledNetworks.length > 0 ||
+    labelledVolumes.length > 0
+  ) {
+    throw new Error(
+      "Найдены course-labelled Docker resources; завершите exact cleanup перед offline inspect."
+    );
+  }
+  return [
+    "PASS fixture inspector preflight",
+    `docker_context=${endpoint.context} endpoint=${endpoint.endpoint} endpoint_source=${endpoint.source}`,
+    `docker=${server.Version} server=${server.Os}/${server.Arch}`,
+    `image=${LAB_IMAGE}`,
+    `image_id=${image.stdout.trim()}`,
+    "network_mode=none labelled_containers=0 labelled_networks=0 labelled_volumes=0"
+  ].join("\n");
+}
+
 export async function inspectFixture(
   root: string,
   target: string
@@ -202,6 +305,7 @@ export async function inspectFixture(
   const [fixture] = await selectFixtures(root, target);
   if (!fixture) throw new Error(`Fixture не найден: ${target}`);
   await verifyFixtures(root, target);
+  await preflightFixtureInspector();
 
   const runId = `fixture-inspect-${randomUUID()}`;
   const name = `cn-fixture-${runId.slice(-12)}`;
@@ -227,11 +331,14 @@ export async function inspectFixture(
       "ALL",
       "--security-opt",
       "no-new-privileges=true",
-      "--read-only",
       "--tmpfs",
       "/tmp:rw,noexec,nosuid,size=16m",
-      "--mount",
-      `type=bind,source=${absolutePcapPath},target=/input.pcap,readonly`,
+      "--pids-limit",
+      "64",
+      "--memory",
+      "128m",
+      "--cpus",
+      "0.5",
       LAB_IMAGE,
       "sleep",
       "infinity"
@@ -241,10 +348,17 @@ export async function inspectFixture(
   const containerId = created.stdout.trim();
   assertDockerId(containerId);
 
+  let result: string | null = null;
+  let inspectionError: unknown = null;
   try {
     await runCommand("docker", ["container", "start", containerId], {
       timeoutMs: 10_000
     });
+    await runCommand(
+      "docker",
+      ["container", "cp", absolutePcapPath, `${containerId}:/input.pcap`],
+      { timeoutMs: 10_000 }
+    );
     const tshark = await runCommand(
       "docker",
       [
@@ -309,25 +423,95 @@ export async function inspectFixture(
         `--- ${relativePath} ---\n${await readFile(path.join(root, relativePath), "utf8")}`
       );
     }
-    return [
+    result = [
       `fixture=${fixture.pcapRelativePath}`,
       `sha256=${sha256(await readFile(path.join(root, fixture.pcapRelativePath)))}`,
       ...companions,
       "--- tshark canonical fields ---",
       tshark.stdout || "(0 frames)"
     ].join("\n");
-  } finally {
-    const cleanup = await tryCommand(
-      "docker",
-      ["container", "rm", "--force", containerId],
-      { timeoutMs: 10_000 }
-    );
-    if (cleanup.exitCode !== 0) {
-      process.stderr.write(
-        `Cleanup warning for exact container ${containerId}: ${cleanup.stderr}\n`
-      );
-    }
+  } catch (error) {
+    inspectionError = error;
   }
+
+  try {
+    await cleanupFixtureInspector(containerId);
+  } catch (cleanupError) {
+    throw new Error(
+      [
+        `Fixture cleanup FAILED for exact container ${containerId}: ${formatUnknownError(cleanupError)}`,
+        inspectionError
+          ? `Inspection also failed: ${formatUnknownError(inspectionError)}`
+          : null
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join("\n")
+    );
+  }
+  if (inspectionError) throw inspectionError;
+  if (result === null) throw new Error("Fixture inspection не вернул output.");
+  return [
+    result,
+    "--- cleanup post-check ---",
+    `exact_container=${containerId}`,
+    "exact_container_absent=true"
+  ].join("\n");
+}
+
+export async function cleanupFixtureInspector(containerId: string): Promise<void> {
+  assertDockerId(containerId);
+  await requireLocalDockerEndpoint();
+  const labels = await tryCommand(
+    "docker",
+    [
+      "container",
+      "inspect",
+      containerId,
+      "--format",
+      `{{index .Config.Labels "${LAB_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_ROLE_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_RUN_LABEL_KEY}"}}`
+    ],
+    { timeoutMs: 10_000 }
+  );
+  if (labels.exitCode !== 0) {
+    if (isNoSuchDockerObject(labels, "container")) return;
+    throw new Error(
+      `Fixture cleanup inspect FAILED for ${containerId}: ${labels.stderr || labels.stdout}`
+    );
+  }
+  const [owner, role, runId] = labels.stdout.split("|");
+  if (
+    owner !== LAB_OWNER_LABEL ||
+    role !== "fixture-inspect" ||
+    !runId?.startsWith("fixture-inspect-")
+  ) {
+    throw new Error(
+      `Refuse cleanup: container ${containerId} не является exact fixture-inspect resource.`
+    );
+  }
+  await runCommand(
+    "docker",
+    ["container", "rm", "--force", containerId],
+    { timeoutMs: 10_000 }
+  );
+  const remaining = await tryCommand(
+    "docker",
+    ["container", "inspect", containerId, "--format", "{{.Id}}"],
+    { timeoutMs: 10_000 }
+  );
+  if (remaining.exitCode === 0) {
+    throw new Error(
+      `Fixture cleanup post-check FAILED: container ${containerId} всё ещё существует.`
+    );
+  }
+  if (!isNoSuchDockerObject(remaining, "container")) {
+    throw new Error(
+      `Fixture cleanup post-check inspect FAILED for ${containerId}: ${remaining.stderr || remaining.stdout}`
+    );
+  }
+}
+
+function formatUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 async function selectFixtures(
@@ -548,6 +732,7 @@ function novelLocalExchangeFixture(): FixtureDefinition {
   const provenancePath = `${base}.provenance.md`;
   const hashPath = `${base}.sha256.txt`;
   const textPath = `${base}.txt`;
+  const baselinePath = `${base}.baseline.txt`;
   const hash = sha256(pcap);
   return {
     id: "novel-local-exchange",
@@ -563,10 +748,22 @@ function novelLocalExchangeFixture(): FixtureDefinition {
           "- Generator: packages/network-lab/src/fixtures.ts\n" +
           "- Origin: deterministic synthetic bytes; no live or external traffic.\n" +
           `- Inventory: alpha ${alpha.ipv4} / ${alpha.mac}; beta ${beta.ipv4} / ${beta.mac}.\n` +
+          `- Baseline companion: ${baselinePath}; alpha:eth0 is UP/LOWER_UP and the beta neighbor entry is absent before the bounded exchange.\n` +
           "- Assumption supplied by the bundle: both endpoints belong to one local Ethernet LAN.\n" +
           "- Capture point model: alpha network namespace, ARP and IPv4 ICMP, six-frame ceiling.\n" +
           "- Deterministic fields: timestamps, addresses, payload, identifiers, checksums and order.\n" +
           "- The capture does not expose endpoint internals, host routing or traffic outside its window.\n"
+        )
+      ],
+      [
+        baselinePath,
+        utf8(
+          "recorded_at=2024-01-01T00:20:00.000Z\n" +
+          "capture_point=alpha:eth0\n" +
+          "eth0_state=UP LOWER_UP\n" +
+          `mac=${alpha.mac}\n` +
+          `ipv4=${alpha.ipv4}\n` +
+          `neighbor_${beta.ipv4}=absent\n`
         )
       ],
       [
@@ -582,7 +779,7 @@ function novelLocalExchangeFixture(): FixtureDefinition {
         )
       ]
     ]),
-    companionRelativePaths: [provenancePath, hashPath, textPath]
+    companionRelativePaths: [provenancePath, hashPath, baselinePath, textPath]
   };
 }
 

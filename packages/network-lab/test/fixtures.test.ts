@@ -26,6 +26,11 @@ describe("deterministic packet fixtures", () => {
     expect(countPcapRecords(getPcap("arp-no-reply"))).toBe(3);
     expect(countPcapRecords(getPcap("icmp-no-reply"))).toBe(3);
     expect(countPcapRecords(getPcap("novel-local-exchange"))).toBe(6);
+    expect(
+      getFixture("novel-local-exchange").artifacts.has(
+        "fixtures/01-06/novel-local-exchange.baseline.txt"
+      )
+    ).toBe(true);
     for (const caseId of [
       "interface-not-ready",
       "arp-no-reply",

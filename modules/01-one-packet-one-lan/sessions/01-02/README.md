@@ -18,7 +18,7 @@ course labels и точные имена. Не подключайте лабор
 
 ## До запуска: expected
 
-Запишите прогноз в `evidence/baseline.md` до `up`:
+Запишите прогноз и текущий UTC timestamp в `evidence/baseline.md` до `up`:
 
 - появятся ровно два lab endpoints;
 - у каждого будет `eth0` в состоянии `UP/LOWER_UP`;
@@ -37,8 +37,10 @@ course labels и точные имена. Не подключайте лабор
 наблюдаемое runtime state.
 
 ```text
+expected recorded with timestamp
+      ↓ run-scoped preflight proves initial labelled counts are zero
 declared topology
-      ↓ docker creates resources
+      ↓ exact action marker, then Docker creates resources
 container running
       ↓ inspect inside its Linux network namespace
 eth0 exists → link is up → MAC observed → IPv4 observed
@@ -60,18 +62,23 @@ probe» допустим только после обоих наборов evide
 Observed: `eth0` существует, flags сообщают admin/link state, MAC виден. В строках
 нет `inet 172.30.0.10`, поэтому IPv4 configuration остаётся unknown. Нельзя
 дописать expected address в раздел observed только потому, что он указан в
-Compose.
+declaration topology.
+
+В этой карточке `UP` означает, что interface административно включён, а
+`LOWER_UP` — что virtual link layer сообщает доступный нижний уровень/peer. Эти
+flags не доказывают IPv4 address и не доказывают передачу packet.
 
 ### Разобранный пример 2: cleanup проверен отдельно
 
 ```text
 containers: 0
 networks: 0
+volumes: 0
 ```
 
 Если эти числа получены командой `network:lab status` после `down` и относятся к
 course labels, они подтверждают post-condition лаборатории. Простой успешный exit
-code `docker compose down` слабее: команда могла работать с другим project name.
+code cleanup-команды слабее: она могла ничего не найти или работать с другим run.
 
 ## Preflight и stop conditions
 
@@ -81,25 +88,32 @@ code `docker compose down` слабее: команда могла работа�
    pnpm network:lab status
    ```
 
-2. Проверьте Docker, архитектуру image, поддержку isolated gateway mode, свободное
-   место и отсутствие конфликтующих exact resources:
+2. Проверьте effective Docker context/endpoint, Engine, server architecture,
+   pinned image, поддержку isolated gateway mode, fixed subnet, свободное место и
+   отсутствие конфликтующих exact resources:
 
    ```bash
    pnpm network:lab preflight
    ```
 
-3. Если image ещё не загружен, отдельно выполните:
+3. Если единственная ошибка — `Pinned image не загружен`, это исправимое состояние
+   первого запуска. Отдельно выполните:
 
    ```bash
    pnpm network:lab preload
    ```
 
-   Это единственный шаг карточки, которому нужен registry access. Все lab runs
-   затем используют локальный image с `--pull never`.
+   Это единственный шаг карточки, которому нужен registry access. Затем обязательно
+   повторите `pnpm network:lab preflight` и продолжайте только после PASS. Все lab
+   runs используют локальный image с `--pull never`.
 
-Остановитесь, если preflight не PASS, обнаружен неожиданный resource с тем же
-именем, Docker сообщает неподдерживаемый gateway mode или команда предлагает
-другие targets. Не обходите guardrails ручным `docker run --privileged`.
+Кроме явно описанной ветки missing image, остановитесь, если preflight не PASS,
+endpoint не является local absolute `unix://` socket, Engine rootless, fixed
+`172.30.0.0/24` пересекается с existing Docker network, обнаружен неожиданный
+resource с тем же именем, Docker сообщает неподдерживаемый gateway mode или
+команда предлагает другие targets. При subnet conflict не удаляйте чужую сеть:
+используйте другой local учебный daemon или запросите поддержку курса. Не обходите
+guardrails ручным `docker run --privileged`.
 
 ## Процедура
 
@@ -110,6 +124,13 @@ code `docker compose down` слабее: команда могла работа�
    pnpm network:lab up 01-02
    ```
 
+   `up` повторяет preflight непосредственно перед действием и сохраняет связанный
+   с unique run файл `preflight.json`: effective local context/endpoint,
+   Engine/server architecture, pinned image ID, checked network inventory с
+   `networkInventory.conflictCount=0`, owner label, exact target names и initial
+   labelled counts `containers=0`, `networks=0`, `volumes=0`. Затем `events.jsonl`
+   фиксирует отдельный action start marker.
+
 3. Снимите baseline. Команда печатает выполняемые Linux-команды и добавляет raw
    output в новый run directory; она не переиспользует существующий raw artifact:
 
@@ -117,8 +138,12 @@ code `docker compose down` слабее: команда могла работа�
    pnpm network:lab baseline
    ```
 
-4. Перенесите только существенные observed values и ссылку на raw run directory в
-   `evidence/baseline.md`. Отдельно напишите ограниченный inference.
+   В успешном run появятся `topology-inspect.json` с normalized Docker isolation,
+   capabilities, mounts/ports и exact endpoints и `baseline.txt` с Linux
+   interface evidence.
+4. Перенесите только существенные observed values и точные ссылки на
+   `preflight.json`, `events.jsonl`, `topology-inspect.json` и `baseline.txt` одного
+   run в `evidence/baseline.md`. Отдельно напишите ограниченный inference.
 5. Выполните cleanup и сохраните результат post-check:
 
    ```bash
@@ -126,8 +151,22 @@ code `docker compose down` слабее: команда могла работа�
    pnpm network:lab status
    ```
 
-   Заполните `evidence/post-check.md` фактическим output/status, не примером из
-   README.
+   `down` сохраняет `post-check.txt` в той же run directory до удаления active
+   state. Заполните `evidence/post-check.md` ссылкой на этот raw файл и фактическими
+   counts. Последующий `status` — независимая видимая перепроверка, но не замена
+   raw post-check.
+
+### Если runtime baseline не совпал
+
+Не переходите к дальнейшим действиям и не исправляйте raw output под expected.
+`network:lab baseline` при ошибке записывает её в unique run и сам пытается
+выполнить exact cleanup. Если вы заметили discrepancy отдельно, выполните только
+`pnpm network:lab down`, затем `pnpm network:lab status`.
+
+Сохраните failed run directory и отметьте её в artifact как неуспешную попытку.
+Новый запуск получает другой run id и не перезаписывает её. Если cleanup/post-check
+не PASS, runner сохраняет active state; не удаляйте чужие resources вручную,
+повторите только scoped `down` или остановитесь и передайте evidence на review.
 
 ## Два правдоподобных неверных пути
 
@@ -139,22 +178,31 @@ code `docker compose down` слабее: команда могла работа�
 
 ## Проверка и evidence
 
-- Local: `pnpm session:check` запускает `network-evidence` и проверяет структуру
-  двух Markdown artifacts, отсутствие TODO и ссылки на отдельные observed/post-check
-  данные. Команда не утверждает истинность вписанных наблюдений.
-- Empirical: raw baseline и status реально получены указанными lab-командами.
+- Local: `pnpm session:check` запускает `network-evidence` и проверяет headings,
+  отсутствие TODO, обязательные raw filenames, порядок expected/action/cleanup
+  timestamps, единый run id, initial/final zero counts и isolation/exposure summary.
+  Точная acceptance matrix приведена в consistency-only `acceptance.md`; check не
+  утверждает истинность произвольного вписанного значения.
+- Empirical: raw preflight, action marker, topology inspect, Linux baseline и
+  post-check реально получены указанными lab-командами.
 - Agent: сверяет значения с raw evidence, порядок expected → action → observed,
   границы scope и cleanup.
-- Evidence: `evidence/baseline.md`, `evidence/post-check.md` и локальная ссылка на
-  созданный run directory. Raw capture/log не нужно коммитить.
+- Evidence: `evidence/baseline.md`, `evidence/post-check.md` и локальные ссылки на
+  один exact `.training/evidence/01-02/<run-id>/`. Raw logs не нужно коммитить.
 
 ## DONE
 
-- [ ] Expected записан до `up`, preflight получил PASS.
+- [ ] Expected timestamp раньше raw action marker; saved preflight показывает
+      local `unix://` endpoint, `networkInventory.conflictCount=0`, initial
+      labelled counts `0/0/0` для containers/networks/volumes, exact scope,
+      Engine/architecture и image.
+- [ ] `topology-inspect.json` доказывает internal isolated network, exact endpoints,
+      отсутствие published ports/mounts/added endpoint capabilities.
 - [ ] Observed interface, MAC, IPv4 и link state для обоих endpoints сохранены со
       ссылкой на raw output.
 - [ ] Source facts, observed и inference не смешаны.
-- [ ] `down` выполнен; post-check показывает ноль lab containers и networks.
+- [ ] `down` выполнен; raw `post-check.txt` того же run и независимый status
+      показывают ноль lab containers, networks и volumes.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.
 
 Следующий шаг `01-03` использует уже готовый synthetic capture и не требует
