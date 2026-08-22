@@ -1,12 +1,16 @@
 import { runCommand, type CommandResult } from "./command.js";
 
-export interface DockerEndpointInventory {
+export interface DockerEndpointAddress {
   context: string;
   endpoint: string;
   source: "context" | "DOCKER_CONTEXT" | "DOCKER_HOST";
 }
 
-export async function requireLocalDockerEndpoint(): Promise<DockerEndpointInventory> {
+export interface DockerEndpointInventory extends DockerEndpointAddress {
+  daemonId: string;
+}
+
+export async function resolveLocalDockerEndpoint(): Promise<DockerEndpointAddress> {
   const contextResult = await runCommand("docker", ["context", "show"], {
     timeoutMs: 10_000
   });
@@ -35,7 +39,7 @@ export async function requireLocalDockerEndpoint(): Promise<DockerEndpointInvent
   const endpoint = contextOverride
     ? contextEndpoint
     : hostOverride || contextEndpoint;
-  const source: DockerEndpointInventory["source"] = contextOverride
+  const source: DockerEndpointAddress["source"] = contextOverride
     ? "DOCKER_CONTEXT"
     : hostOverride
       ? "DOCKER_HOST"
@@ -49,18 +53,58 @@ export async function requireLocalDockerEndpoint(): Promise<DockerEndpointInvent
   return { context, endpoint, source };
 }
 
+export async function requireLocalDockerEndpoint(): Promise<DockerEndpointInventory> {
+  const address = await resolveLocalDockerEndpoint();
+  return { ...address, daemonId: await readDockerDaemonId() };
+}
+
+export async function requireMatchingDockerEndpoint(
+  expected: DockerEndpointInventory
+): Promise<DockerEndpointInventory> {
+  const address = await resolveLocalDockerEndpoint();
+  if (address.endpoint !== expected.endpoint) {
+    throw new Error(
+      `Refuse Docker action: active run belongs to ${expected.endpoint}, current local endpoint is ${address.endpoint}. Restore the original Docker context first.`
+    );
+  }
+  const current = { ...address, daemonId: await readDockerDaemonId() };
+  if (!dockerDaemonIdentityMatches(expected, current)) {
+    throw new Error(
+      `Refuse Docker action: endpoint ${address.endpoint} now serves daemon ${current.daemonId}, but active run belongs to daemon ${expected.daemonId}. Restore the original Docker engine first.`
+    );
+  }
+  return current;
+}
+
+export function dockerDaemonIdentityMatches(
+  expected: Pick<DockerEndpointInventory, "endpoint" | "daemonId">,
+  current: Pick<DockerEndpointInventory, "endpoint" | "daemonId">
+): boolean {
+  return (
+    expected.endpoint === current.endpoint &&
+    expected.daemonId === current.daemonId
+  );
+}
+
 export function isLocalUnixDockerEndpoint(endpoint: string): boolean {
   if (!endpoint.startsWith("unix://")) return false;
   const socketPath = endpoint.slice("unix://".length);
   return socketPath.startsWith("/") && socketPath.length > 1 && !socketPath.includes("\0");
 }
 
+export function isSafeDockerDaemonId(value: string): boolean {
+  return /^[A-Za-z0-9:._-]{1,255}$/.test(value);
+}
+
 export function isNoSuchDockerObject(
   result: Pick<CommandResult, "stdout" | "stderr">,
-  kind: "container" | "volume"
+  kind: "container" | "network" | "volume"
 ): boolean {
   const message = `${result.stdout}\n${result.stderr}`;
-  return new RegExp(`no such ${kind}(?:\\b|:)`, "i").test(message);
+  return (
+    new RegExp(`no such ${kind}(?:\\b|:)`, "i").test(message) ||
+    (kind === "network" && /\bnetwork\b[^\n]*\bnot found\b/i.test(message))
+  );
 }
 
 export function ipv4CidrsOverlap(first: string, second: string): boolean {
@@ -99,4 +143,17 @@ function ipv4Range(cidr: string): { start: bigint; end: bigint } | null {
   const hostMask = hostBits === 0n ? 0n : (1n << hostBits) - 1n;
   const start = value & (0xffffffffn ^ hostMask);
   return { start, end: start + hostMask };
+}
+
+async function readDockerDaemonId(): Promise<string> {
+  const result = await runCommand(
+    "docker",
+    ["info", "--format", "{{json .ID}}"],
+    { timeoutMs: 10_000 }
+  );
+  const parsed = JSON.parse(result.stdout) as unknown;
+  if (typeof parsed !== "string" || !isSafeDockerDaemonId(parsed)) {
+    throw new Error("Docker daemon вернул небезопасный или пустой Engine ID.");
+  }
+  return parsed;
 }

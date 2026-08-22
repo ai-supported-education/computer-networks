@@ -57,6 +57,28 @@ describe("network evidence artifact contract", () => {
     const mixedRuns = await validateNetworkEvidence(root, "01-02");
     expect(mixedRuns.ok).toBe(false);
     expect(mixedRuns.messages.join("\n")).toContain("один exact unique run id");
+
+    await writeFile(
+      path.join(root, "evidence", "post-check.md"),
+      postCheck()
+    );
+    await writeFile(
+      path.join(root, "evidence", "baseline.md"),
+      baseline("Expected was recorded at 2026-08-23T00:00:00Z before up.")
+        .replace(
+          "The raw record contains interface eth0, flags UP and LOWER_UP, MAC and IPv4 fields for alpha.",
+          "The raw record contains interface eth0, flags UP and LOWER_UP twice: UP LOWER_UP, MAC and IPv4 fields for alpha."
+        )
+        .replace(
+          "The raw record contains interface eth0, flags UP and LOWER_UP, MAC and IPv4 fields for beta.",
+          "The raw record contains interface eth0, MAC and IPv4 fields for beta."
+        )
+    );
+    const flagsOnlyInAlpha = await validateNetworkEvidence(root, "01-02");
+    expect(flagsOnlyInAlpha.ok).toBe(false);
+    expect(flagsOnlyInAlpha.messages.join("\n")).toContain(
+      "Observed beta должен отдельно содержать UP и LOWER_UP"
+    );
   });
 
   it("fails closed for an unsupported session id", async () => {

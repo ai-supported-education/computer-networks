@@ -76,7 +76,7 @@ production infrastructure никогда не входят в default target sco
 
 Каждая lab session сохраняет доказуемый порядок фаз:
 
-1. Inventory и preflight: effective Docker context/endpoint, runtime,
+1. Inventory и preflight: effective Docker context/endpoint, Engine ID, runtime,
    architecture, image identity, subnet conflicts, свободное место, exact
    labelled run/project, capabilities и evidence path.
 2. Baseline до изменения или probe.
@@ -129,8 +129,9 @@ path отсутствует, либо создаёт новую directory с UTC
 
 - resolved address, interface, container, labelled run/Compose project или protocol не
   совпадает с разрешённым target;
-- effective Docker endpoint не является local absolute `unix://` socket или
-  fixed lab subnet пересекается с existing network;
+- effective Docker endpoint не является local absolute `unix://` socket,
+  сохранённый Engine ID изменился или fixed lab subnet пересекается с existing
+  network;
 - capture видит traffic, который не создан synthetic topology;
 - неожиданно появляется Internet reachability или published host port;
 - baseline не совпадает с карточкой;
@@ -144,8 +145,11 @@ evidence. Agent review не повторяет рискованное дейст
 
 ## Cleanup и post-check
 
-Cleanup останавливает только exact labelled run или Compose project текущей
-session, удаляет его disposable containers/networks/volumes и возвращает временные
+Cleanup работает только с сохранёнными endpoint + Engine ID и exact labelled run
+текущей session. Имена/roles ресурсов резервируются в active state до Docker
+create; cleanup сверяет name/ID/owner/run/role, удаляет disposable
+containers/networks/volumes, затем ждёт bounded clean quiescence, чтобы поймать
+позднее завершение create после CLI timeout. Он возвращает временные
 in-container rules/state в baseline. Он не использует broad host cleanup, не
 удаляет чужие Docker resources и не выполняет ручные изменения host
 routing/firewall. На native Linux сам Docker Engine создаёт и удаляет bridge и

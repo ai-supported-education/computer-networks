@@ -445,12 +445,19 @@ function validateBaselineLifecycle(
       "01-02 evidence: baseline и post-check должны ссылаться на один exact unique run id."
     );
   }
-  const upCount = baseline.match(/\bUP\b/g)?.length ?? 0;
-  const lowerUpCount = baseline.match(/\bLOWER_UP\b/g)?.length ?? 0;
-  if (upCount < 2 || lowerUpCount < 2) {
-    failures.push(
-      "evidence/baseline.md: для alpha и beta нужны observed UP и LOWER_UP flags."
+  for (const endpoint of ["alpha", "beta"] as const) {
+    const section = baselineSections.find((candidate) =>
+      new RegExp(`observed ${endpoint}`, "i").test(candidate.heading)
     );
+    if (
+      !section ||
+      !/\bUP\b/.test(section.body) ||
+      !/\bLOWER_UP\b/.test(section.body)
+    ) {
+      failures.push(
+        `evidence/baseline.md: Observed ${endpoint} должен отдельно содержать UP и LOWER_UP flags.`
+      );
+    }
   }
 }
 

@@ -97,7 +97,8 @@ interface/filter.
 
 1. `pnpm network:lab status` должен показать чистое состояние.
 2. `pnpm network:lab preflight` должен подтвердить local absolute `unix://`
-   endpoint, rootful Engine, `subnet_conflicts=0` и clean initial state; image
+   endpoint, неизменный Engine ID, rootful Engine, `subnet_conflicts=0` и clean
+   initial state; image
    заранее загружен командой `pnpm network:lab preload` при необходимости. Remote
    context или subnet conflict — stop condition; не удаляйте существующую network
    ради карточки.
@@ -151,7 +152,9 @@ interface/filter.
    pnpm network:lab status
    ```
 
-   Сошлитесь на raw `post-check.txt` того же run. При runtime discrepancy capture
+   `down` сверяет persisted endpoint + Engine ID и reserved name/ID/owner/run/role,
+   затем ждёт bounded clean quiescence. Сошлитесь на raw `post-check.txt` того же
+   run. При runtime discrepancy capture
    fail-closed записывает error и пытается выполнить exact cleanup; не запускайте
    ручной probe, сохраните failed run. Если cleanup не PASS, active state остаётся
    для повторного scoped `pnpm network:lab down`.
@@ -181,7 +184,7 @@ interface/filter.
 ## DONE
 
 - [ ] Expected cold/warm timestamp раньше action start; saved preflight показывает
-      local `unix://` endpoint, `networkInventory.conflictCount=0`, initial counts
+      local `unix://` endpoint + Engine ID, `networkInventory.conflictCount=0`, initial counts
       `0/0/0`, exact targets и pinned environment.
 - [ ] Cold phase имеет neighbor-before и bounded capture; warm phase имеет отдельные
       snapshot/capture.
@@ -191,7 +194,7 @@ interface/filter.
 - [ ] Cold ARP Reply рекламирует observed MAC beta; Ethernet directions Echo
       совпадают с fixed inventory.
 - [ ] Raw post-check того же run подтверждает ноль labelled containers, networks
-      и volumes.
+      и volumes после bounded reconciliation/quiescence window.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.
 
 Следующий шаг `01-05` использует только synthetic evidence bundles и не требует

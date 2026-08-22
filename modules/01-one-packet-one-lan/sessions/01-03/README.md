@@ -108,7 +108,8 @@ Source/destination pairs поменялись местами, а ICMP type ст�
    pnpm network:fixture preflight
    ```
 
-   Он допускает только local absolute `unix://` Docker endpoint, Linux
+   Он допускает только local absolute `unix://` Docker endpoint, сохраняет Engine
+   ID, требует Linux
    amd64/arm64 и уже загруженный pinned image. Если отсутствует только image,
    выполните `pnpm network:fixture preload`, затем повторите preflight. Remote
    context — stop condition. Любой другой non-PASS также означает остановку и
@@ -131,14 +132,18 @@ Source/destination pairs поменялись местами, а ICMP type ст�
    `--network none`, `cap-drop=ALL`, `no-new-privileges`,
    bounded CPU/memory/PIDs и `--pull never`; verified fixture копируется exact
    `docker cp` в disposable container filesystem, без host bind mount. Writable
-   disposable rootfs нужен только parser container и удаляется до PASS.
+   disposable rootfs нужен только parser container и удаляется до PASS. Перед
+   parsing runner проверяет фактические network/capability/mount/port/limit fields
+   через `docker inspect` и сохраняет normalized snapshot в `inspect.txt`.
    Команда считается успешной только если exact offline container удалён и output
    заканчивается `exact_container_absent=true`. При `Fixture cleanup FAILED`
    остановитесь; выполните только напечатанную команду вида
    `pnpm network:fixture cleanup .training/evidence/01-03/<failed-run-id>`, затем
    проверьте `pnpm network:lab status`. Recovery читает сохранённые endpoint,
-   reserved name, run label и container ID из `recovery.json`, поэтому откажется
-   удалять объект из другого Docker daemon или с другой identity. Напечатанный
+   Engine ID, reserved name, run label и container ID из `recovery.json`, поэтому
+   откажется удалять объект из другого Docker daemon или с другой identity. После
+   удаления он ждёт bounded clean quiescence на случай позднего завершения create.
+   Напечатанный
    `failed_run` сохраняйте как failed
    evidence; повтор получает новый run id и не перезаписывает его. Недоступный
    daemon или permission error не считается доказательством отсутствия container

@@ -11,10 +11,13 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { DOCKER_ID_PATTERN } from "./constants.js";
-import type { DockerEndpointInventory } from "./docker-safety.js";
+import {
+  isSafeDockerDaemonId,
+  type DockerEndpointInventory
+} from "./docker-safety.js";
 
 export interface LabState {
-  schemaVersion: 1;
+  schemaVersion: 2;
   runId: string;
   sessionId: "01-02" | "01-04";
   createdAt: string;
@@ -22,13 +25,19 @@ export interface LabState {
   sequence: number;
   baselinePassed: boolean;
   dockerEndpoint: DockerEndpointInventory;
-  networkId: string | null;
+  network: DockerResourceReservation;
   volumeNames: string[];
-  containerIds: {
-    alpha: string | null;
-    beta: string | null;
-    helpers: string[];
+  containers: {
+    alpha: DockerResourceReservation;
+    beta: DockerResourceReservation;
+    helpers: DockerResourceReservation[];
   };
+}
+
+export interface DockerResourceReservation {
+  name: string;
+  role: string;
+  id: string | null;
 }
 
 export interface LabEvent {
@@ -59,7 +68,7 @@ export async function reserveState(
     path.join(".training", "evidence", sessionId, runId)
   );
   const state: LabState = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     runId,
     sessionId,
     createdAt: now.toISOString(),
@@ -67,11 +76,11 @@ export async function reserveState(
     sequence: 0,
     baselinePassed: false,
     dockerEndpoint,
-    networkId: null,
+    network: { name: "cn-lab", role: "network", id: null },
     volumeNames: [],
-    containerIds: {
-      alpha: null,
-      beta: null,
+    containers: {
+      alpha: { name: "cn-alpha", role: "alpha", id: null },
+      beta: { name: "cn-beta", role: "beta", id: null },
       helpers: []
     }
   };
@@ -162,6 +171,16 @@ export async function removeState(root: string): Promise<void> {
   await unlink(getStateFile(root));
 }
 
+export function getReservedContainerCleanupOrder(
+  state: LabState
+): DockerResourceReservation[] {
+  return [
+    ...state.containers.helpers.slice().reverse(),
+    state.containers.beta,
+    state.containers.alpha
+  ];
+}
+
 export function runPath(root: string, state: LabState, ...parts: string[]): string {
   return path.join(root, state.runDirectory, ...parts);
 }
@@ -176,7 +195,7 @@ function assertState(value: unknown): asserts value is LabState {
   }
   const state = value as Partial<LabState>;
   if (
-    state.schemaVersion !== 1 ||
+    state.schemaVersion !== 2 ||
     typeof state.runId !== "string" ||
     !/^[a-zA-Z0-9-]+$/.test(state.runId) ||
     (state.sessionId !== "01-02" && state.sessionId !== "01-04") ||
@@ -188,37 +207,68 @@ function assertState(value: unknown): asserts value is LabState {
     typeof state.dockerEndpoint.context !== "string" ||
     typeof state.dockerEndpoint.endpoint !== "string" ||
     !state.dockerEndpoint.endpoint.startsWith("unix:///") ||
+    typeof state.dockerEndpoint.daemonId !== "string" ||
+    !isSafeDockerDaemonId(state.dockerEndpoint.daemonId) ||
     !["context", "DOCKER_CONTEXT", "DOCKER_HOST"].includes(
       state.dockerEndpoint.source ?? ""
     ) ||
-    !state.containerIds ||
+    !state.network ||
+    !state.containers ||
     !Array.isArray(state.volumeNames) ||
     state.volumeNames.some(
       (name) =>
         typeof name !== "string" ||
         !/^cn-capture-(?:cold|warm)-[a-f0-9]{8}$/.test(name)
     ) ||
-    (state.networkId !== null && typeof state.networkId !== "string") ||
-    (state.containerIds.alpha !== null &&
-      typeof state.containerIds.alpha !== "string") ||
-    (state.containerIds.beta !== null &&
-      typeof state.containerIds.beta !== "string") ||
-    !Array.isArray(state.containerIds.helpers) ||
-    state.containerIds.helpers.some((id) => typeof id !== "string")
+    !isExactReservation(state.network, "cn-lab", "network") ||
+    !isExactReservation(state.containers.alpha, "cn-alpha", "alpha") ||
+    !isExactReservation(state.containers.beta, "cn-beta", "beta") ||
+    !Array.isArray(state.containers.helpers) ||
+    state.containers.helpers.some(
+      (reservation) =>
+        !isHelperReservation(reservation, state.runId as string)
+    )
   ) {
     throw new Error("Lab state имеет неверную schema.");
   }
-  const ids: (string | null)[] = [
-    state.networkId,
-    state.containerIds.alpha,
-    state.containerIds.beta,
-    ...state.containerIds.helpers
-  ];
-  for (const id of ids) {
-    if (id !== null && !DOCKER_ID_PATTERN.test(id)) {
-      throw new Error("Lab state содержит небезопасный Docker ID.");
-    }
+}
+
+function isExactReservation(
+  value: unknown,
+  name: string,
+  role: string
+): value is DockerResourceReservation {
+  if (!value || typeof value !== "object") return false;
+  const reservation = value as Partial<DockerResourceReservation>;
+  return (
+    reservation.name === name &&
+    reservation.role === role &&
+    (reservation.id === null ||
+      (typeof reservation.id === "string" &&
+        DOCKER_ID_PATTERN.test(reservation.id)))
+  );
+}
+
+function isHelperReservation(
+  value: unknown,
+  runId: string
+): value is DockerResourceReservation {
+  if (!value || typeof value !== "object") return false;
+  const reservation = value as Partial<DockerResourceReservation>;
+  if (
+    typeof reservation.role !== "string" ||
+    !/^(?:capture-(?:cold|warm)|probe-(?:cold|warm)|neigh-flush)$/.test(
+      reservation.role
+    )
+  ) {
+    return false;
   }
+  return (
+    reservation.name === `cn-${reservation.role}-${runId.slice(-8)}` &&
+    (reservation.id === null ||
+      (typeof reservation.id === "string" &&
+        DOCKER_ID_PATTERN.test(reservation.id)))
+  );
 }
 
 function toPosix(value: string): string {

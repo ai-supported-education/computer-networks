@@ -97,7 +97,7 @@ code cleanup-команды слабее: она могла ничего не н
    pnpm network:lab status
    ```
 
-2. Проверьте effective Docker context/endpoint, Engine, server architecture,
+2. Проверьте effective Docker context/endpoint, Engine ID, server architecture,
    pinned image, поддержку isolated gateway mode, fixed subnet, свободное место и
    отсутствие конфликтующих exact resources:
 
@@ -117,7 +117,8 @@ code cleanup-команды слабее: она могла ничего не н
    runs используют локальный image с `--pull never`.
 
 Кроме явно описанной ветки missing image, остановитесь, если preflight не PASS,
-endpoint не является local absolute `unix://` socket, Engine rootless, fixed
+endpoint не является local absolute `unix://` socket, Engine ID меняется между
+фазами, Engine rootless, fixed
 `172.30.0.0/24` пересекается с existing Docker network, обнаружен неожиданный
 resource с тем же именем, Docker сообщает неподдерживаемый gateway mode или
 команда предлагает другие targets. При subnet conflict не удаляйте чужую сеть:
@@ -134,8 +135,8 @@ guardrails ручным `docker run --privileged`.
    ```
 
    `up` повторяет preflight непосредственно перед действием и сохраняет связанный
-   с unique run файл `preflight.json`: effective local context/endpoint,
-   Engine/server architecture, pinned image ID, checked network inventory с
+   с unique run файл `preflight.json`: effective local context/endpoint и Engine
+   ID, Engine/server architecture, pinned image ID, checked network inventory с
    `networkInventory.conflictCount=0`, owner label, exact target names и initial
    labelled counts `containers=0`, `networks=0`, `volumes=0`. Затем `events.jsonl`
    фиксирует отдельный action start marker. Для секции Action start скопируйте
@@ -162,8 +163,12 @@ guardrails ручным `docker run --privileged`.
    pnpm network:lab status
    ```
 
-   `down` сохраняет `post-check.txt` в той же run directory до удаления active
-   state. Заполните `evidence/post-check.md` ссылкой на этот raw файл и фактическими
+   `down` использует заранее сохранённые name/role reservations, сверяет
+   name/ID/owner/run/role на исходном Engine и ждёт bounded clean quiescence после
+   удаления. Это позволяет повторному `down` восстановить run даже после CLI
+   timeout между daemon-side create и возвратом ID. Затем команда сохраняет
+   `post-check.txt` в той же run directory до удаления active state. Заполните
+   `evidence/post-check.md` ссылкой на этот raw файл и фактическими
    counts. Для Cleanup action скопируйте поле `at` записи `phase="cleanup"`,
    `kind="cleanup"` из `events.jsonl`; отдельно перенесите `checked_at` из
    `post-check.txt` как время наблюдения конечного состояния. Последующий `status`
@@ -182,7 +187,7 @@ guardrails ручным `docker run --privileged`.
 спутает его с предыдущими попытками. Новый запуск получает другой run id и не
 перезаписывает failed evidence. Если cleanup/post-check не PASS, runner сохраняет
 active state; не удаляйте чужие resources вручную, повторите только scoped `down`
-или остановитесь и передайте evidence на review.
+на том же endpoint и Engine ID или остановитесь и передайте evidence на review.
 
 ## Два правдоподобных неверных пути
 
@@ -209,7 +214,7 @@ active state; не удаляйте чужие resources вручную, пов�
 ## DONE
 
 - [ ] Expected timestamp раньше raw action marker; saved preflight показывает
-      local `unix://` endpoint, `networkInventory.conflictCount=0`, initial
+      local `unix://` endpoint + Engine ID, `networkInventory.conflictCount=0`, initial
       labelled counts `0/0/0` для containers/networks/volumes, exact scope,
       Engine/architecture и image.
 - [ ] `topology-inspect.json` доказывает internal isolated network, exact endpoints,
@@ -217,7 +222,8 @@ active state; не удаляйте чужие resources вручную, пов�
 - [ ] Observed interface, MAC, IPv4 и link state для обоих endpoints сохранены со
       ссылкой на raw output.
 - [ ] Source facts, observed и inference не смешаны.
-- [ ] `down` выполнен; raw `post-check.txt` того же run и независимый status
+- [ ] `down` выполнен; raw `post-check.txt` того же run содержит bounded
+      reconciliation/quiescence evidence, а независимый status
       показывают ноль lab containers, networks и volumes.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.
 

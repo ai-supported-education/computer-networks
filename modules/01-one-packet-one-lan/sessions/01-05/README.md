@@ -161,8 +161,8 @@ unknown.
 
 Если inspect сообщает `Fixture cleanup FAILED`, не продолжайте и не выдавайте
 анализ за DONE. Выполните только напечатанную recovery-команду с exact failed run
-directory; она сверяет сохранённые Docker endpoint, reserved name, run label и
-container ID перед удалением:
+directory; она сверяет сохранённые Docker endpoint, Engine ID, reserved name, run
+label и container ID перед удалением, а затем ждёт bounded clean quiescence:
 
 ```bash
 pnpm network:fixture cleanup .training/evidence/01-05/<failed-run-id>

@@ -25,6 +25,8 @@ import {
   isNoSuchDockerObject,
   isLocalUnixDockerEndpoint,
   requireLocalDockerEndpoint,
+  requireMatchingDockerEndpoint,
+  isSafeDockerDaemonId,
   type DockerEndpointInventory
 } from "./docker-safety.js";
 import {
@@ -34,6 +36,7 @@ import {
   sha256,
   type PcapRecord
 } from "./pcap.js";
+import { waitForCleanupQuiescence } from "./reconciliation.js";
 
 export interface FixtureDefinition {
   id: string;
@@ -47,6 +50,9 @@ const alpha = LAB_ENDPOINTS.alpha;
 const beta = LAB_ENDPOINTS.beta;
 const broadcast = "ff:ff:ff:ff:ff:ff";
 const zeroMac = "00:00:00:00:00:00";
+const FIXTURE_CLEANUP_QUIET_PERIOD_MS = 3_000;
+const FIXTURE_CLEANUP_TIMEOUT_MS = 15_000;
+const FIXTURE_CLEANUP_POLL_INTERVAL_MS = 250;
 
 export function buildFixtureDefinitions(): readonly FixtureDefinition[] {
   const known = knownNeighbourFixture();
@@ -213,13 +219,9 @@ export async function verifyFixtures(
 export async function preflightFixtureInspector(
   knownEndpoint?: DockerEndpointInventory
 ): Promise<string> {
-  const currentEndpoint = await requireLocalDockerEndpoint();
-  if (knownEndpoint && currentEndpoint.endpoint !== knownEndpoint.endpoint) {
-    throw new Error(
-      `Refuse fixture action: run belongs to ${knownEndpoint.endpoint}, current endpoint is ${currentEndpoint.endpoint}.`
-    );
-  }
-  const endpoint = knownEndpoint ?? currentEndpoint;
+  const endpoint = knownEndpoint
+    ? await requireMatchingDockerEndpoint(knownEndpoint)
+    : await requireLocalDockerEndpoint();
   const version = await runCommand(
     "docker",
     ["version", "--format", "{{json .Server}}"],
@@ -309,7 +311,7 @@ export async function preflightFixtureInspector(
   }
   return [
     "PASS fixture inspector preflight",
-    `docker_context=${endpoint.context} endpoint=${endpoint.endpoint} endpoint_source=${endpoint.source}`,
+    `docker_context=${endpoint.context} endpoint=${endpoint.endpoint} endpoint_source=${endpoint.source} daemon_id=${endpoint.daemonId}`,
     `docker=${server.Version} server=${server.Os}/${server.Arch}`,
     `image=${LAB_IMAGE}`,
     `image_id=${image.stdout.trim()}`,
@@ -348,7 +350,7 @@ export async function inspectFixture(
       ].join("\n") + "\n"
     );
     recoveryState = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       evidenceRunDirectory: evidenceRun.relativeDirectory,
       dockerEndpoint,
       dockerRunId,
@@ -370,6 +372,7 @@ export async function inspectFixture(
       kind: "action",
       detail: `create reserved ${name} with run label ${dockerRunId} as one network-none parser for ${fixture.pcapRelativePath}`
     });
+    await requireMatchingDockerEndpoint(recoveryState.dockerEndpoint);
     const created = await runCommand(
       "docker",
       [
@@ -412,6 +415,10 @@ export async function inspectFixture(
     await runCommand("docker", ["container", "start", containerId], {
       timeoutMs: 10_000
     });
+    const parserSafety = await inspectFixtureContainerSafety(
+      containerId,
+      recoveryState
+    );
     await runCommand(
       "docker",
       ["container", "cp", absolutePcapPath, `${containerId}:/input.pcap`],
@@ -493,6 +500,8 @@ export async function inspectFixture(
       `fixture=${fixture.pcapRelativePath}`,
       `sha256=${sha256(await readFile(path.join(root, fixture.pcapRelativePath)))}`,
       ...companions,
+      "--- parser safety inspect ---",
+      JSON.stringify(parserSafety, null, 2),
       "--- tshark canonical fields ---",
       tshark.stdout || "(0 frames)"
     ].join("\n");
@@ -521,6 +530,7 @@ export async function inspectFixture(
   }
 
   let cleanupError: unknown = null;
+  let cleanupResult: FixtureCleanupResult | null = null;
   if (recoveryState) {
     await appendFixtureRunEvent(evidenceRun, {
       phase: "cleanup",
@@ -528,8 +538,8 @@ export async function inspectFixture(
       detail: `remove reserved ${recoveryState.containerName} after exact endpoint and run-label verification`
     }).catch(() => undefined);
     try {
-      containerId =
-        (await cleanupFixtureRecoveryState(recoveryState)) ?? containerId;
+      cleanupResult = await cleanupFixtureRecoveryState(recoveryState);
+      containerId = cleanupResult.containerId ?? containerId;
     } catch (error) {
       cleanupError = error;
     }
@@ -545,6 +555,9 @@ export async function inspectFixture(
         `checked_at=${new Date().toISOString()}`,
         `exact_container=${containerId ?? recoveryState.containerName}`,
         "exact_container_absent=true",
+        `reconciliation_quiet_ms=${FIXTURE_CLEANUP_QUIET_PERIOD_MS}`,
+        `reconciliation_observations=${cleanupResult?.observations ?? 0}`,
+        `reconciliation_removals=${cleanupResult?.removals ?? 0}`,
         cleanPreflight
       ].join("\n");
       await writeFixtureRunArtifact(
@@ -615,15 +628,19 @@ export async function cleanupFixtureInspectorRun(
   runDirectory: string
 ): Promise<string> {
   const { run, recovery } = await readFixtureRecoveryState(root, runDirectory);
-  const removedContainer = await cleanupFixtureRecoveryState(recovery);
+  const cleanup = await cleanupFixtureRecoveryState(recovery);
   const cleanPreflight = await preflightFixtureInspector(recovery.dockerEndpoint);
   const result = [
     "PASS fixture cleanup",
     `run=${run.relativeDirectory}`,
     `endpoint=${recovery.dockerEndpoint.endpoint}`,
+    `daemon_id=${recovery.dockerEndpoint.daemonId}`,
     `reserved_container=${recovery.containerName}`,
-    `exact_container=${removedContainer ?? recovery.containerId ?? "already-absent"}`,
+    `exact_container=${cleanup.containerId ?? recovery.containerId ?? "already-absent"}`,
     "exact_container_absent=true",
+    `reconciliation_quiet_ms=${FIXTURE_CLEANUP_QUIET_PERIOD_MS}`,
+    `reconciliation_observations=${cleanup.observations}`,
+    `reconciliation_removals=${cleanup.removals}`,
     cleanPreflight
   ].join("\n");
   const artifactName =
@@ -642,14 +659,28 @@ export async function cleanupFixtureInspectorRun(
 
 async function cleanupFixtureRecoveryState(
   recovery: FixtureRecoveryState
+): Promise<FixtureCleanupResult> {
+  await requireMatchingDockerEndpoint(recovery.dockerEndpoint);
+  let containerId = recovery.containerId;
+  const reconciliation = await waitForCleanupQuiescence(
+    async () => {
+      const removed = await removeFixtureContainerOnce(recovery);
+      if (removed) containerId = removed;
+      return { clean: true, removals: removed ? 1 : 0 };
+    },
+    {
+      quietPeriodMs: FIXTURE_CLEANUP_QUIET_PERIOD_MS,
+      timeoutMs: FIXTURE_CLEANUP_TIMEOUT_MS,
+      pollIntervalMs: FIXTURE_CLEANUP_POLL_INTERVAL_MS
+    }
+  );
+  return { containerId, ...reconciliation };
+}
+
+async function removeFixtureContainerOnce(
+  recovery: FixtureRecoveryState
 ): Promise<string | null> {
-  const currentEndpoint = await requireLocalDockerEndpoint();
-  if (currentEndpoint.endpoint !== recovery.dockerEndpoint.endpoint) {
-    throw new Error(
-      `Refuse fixture cleanup: parser belongs to ${recovery.dockerEndpoint.endpoint}, current endpoint is ${currentEndpoint.endpoint}. Restore the original Docker context first.`
-    );
-  }
-  const target = recovery.containerId ?? recovery.containerName;
+  const target = recovery.containerName;
   const labels = await tryCommand(
     "docker",
     [
@@ -659,7 +690,7 @@ async function cleanupFixtureRecoveryState(
       "--format",
       `{{.Id}}|{{index .Config.Labels "${LAB_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_ROLE_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_RUN_LABEL_KEY}"}}`
     ],
-    { timeoutMs: 10_000 }
+    { timeoutMs: 10_000, log: false }
   );
   if (labels.exitCode !== 0) {
     if (isNoSuchDockerObject(labels, "container")) return null;
@@ -690,7 +721,7 @@ async function cleanupFixtureRecoveryState(
   const remaining = await tryCommand(
     "docker",
     ["container", "inspect", containerId, "--format", "{{.Id}}"],
-    { timeoutMs: 10_000 }
+    { timeoutMs: 10_000, log: false }
   );
   if (remaining.exitCode === 0) {
     throw new Error(
@@ -712,12 +743,128 @@ interface FixtureEvidenceRun {
 }
 
 interface FixtureRecoveryState {
-  schemaVersion: 1;
+  schemaVersion: 2;
   evidenceRunDirectory: string;
   dockerEndpoint: DockerEndpointInventory;
   dockerRunId: string;
   containerName: string;
   containerId: string | null;
+}
+
+interface FixtureCleanupResult {
+  containerId: string | null;
+  observations: number;
+  removals: number;
+}
+
+interface FixtureContainerInspect {
+  Id?: string;
+  Name?: string;
+  Config?: {
+    Image?: string;
+    Labels?: Record<string, string>;
+  };
+  State?: { Running?: boolean };
+  HostConfig?: {
+    NetworkMode?: string;
+    Privileged?: boolean;
+    ReadonlyRootfs?: boolean;
+    CapAdd?: string[] | null;
+    CapDrop?: string[] | null;
+    SecurityOpt?: string[] | null;
+    Binds?: string[] | null;
+    PortBindings?: Record<string, unknown> | null;
+    PidsLimit?: number;
+    Memory?: number;
+    NanoCpus?: number;
+    Tmpfs?: Record<string, string> | null;
+  };
+  Mounts?: unknown[];
+  NetworkSettings?: {
+    Networks?: Record<string, unknown>;
+    Ports?: Record<string, unknown> | null;
+  };
+}
+
+async function inspectFixtureContainerSafety(
+  containerId: string,
+  recovery: FixtureRecoveryState
+): Promise<Record<string, unknown>> {
+  const inspected = await runCommand(
+    "docker",
+    ["container", "inspect", containerId],
+    { timeoutMs: 10_000 }
+  );
+  const parsed = JSON.parse(inspected.stdout) as unknown;
+  const value = Array.isArray(parsed) ? parsed[0] : null;
+  if (!value || typeof value !== "object") {
+    throw new Error("Fixture parser docker inspect не вернул object.");
+  }
+  const inspect = value as FixtureContainerInspect;
+  const host = inspect.HostConfig ?? {};
+  const labels = inspect.Config?.Labels ?? {};
+  const networkNames = Object.keys(inspect.NetworkSettings?.Networks ?? {});
+  const capDrop = host.CapDrop ?? [];
+  const capAdd = host.CapAdd ?? [];
+  const securityOptions = host.SecurityOpt ?? [];
+  const portBindings = host.PortBindings ?? {};
+  const exposedPorts = inspect.NetworkSettings?.Ports ?? {};
+  const tmpfs = host.Tmpfs ?? {};
+  if (
+    inspect.Id !== containerId ||
+    inspect.Name !== `/${recovery.containerName}` ||
+    inspect.Config?.Image !== LAB_IMAGE ||
+    labels[LAB_LABEL_KEY] !== LAB_OWNER_LABEL ||
+    labels[LAB_RUN_LABEL_KEY] !== recovery.dockerRunId ||
+    labels[LAB_ROLE_LABEL_KEY] !== "fixture-inspect" ||
+    inspect.State?.Running !== true ||
+    host.NetworkMode !== "none" ||
+    !(
+      networkNames.length === 0 ||
+      (networkNames.length === 1 && networkNames[0] === "none")
+    ) ||
+    host.Privileged !== false ||
+    host.ReadonlyRootfs !== false ||
+    !capDrop.includes("ALL") ||
+    capAdd.length !== 0 ||
+    !securityOptions.some((entry) => entry.startsWith("no-new-privileges")) ||
+    (host.Binds ?? []).length !== 0 ||
+    (inspect.Mounts ?? []).length !== 0 ||
+    Object.keys(portBindings).length !== 0 ||
+    Object.keys(exposedPorts).length !== 0 ||
+    host.PidsLimit !== 64 ||
+    host.Memory !== 128 * 1024 * 1024 ||
+    host.NanoCpus !== 500_000_000 ||
+    typeof tmpfs["/tmp"] !== "string"
+  ) {
+    throw new Error(
+      "Fixture parser не подтвердил exact offline capability/network/resource safety contract."
+    );
+  }
+  return {
+    container_id: inspect.Id,
+    name: recovery.containerName,
+    image: inspect.Config.Image,
+    owner_label: labels[LAB_LABEL_KEY],
+    run_label: labels[LAB_RUN_LABEL_KEY],
+    role_label: labels[LAB_ROLE_LABEL_KEY],
+    running: true,
+    network_mode: host.NetworkMode,
+    network_attachments: networkNames,
+    privileged: host.Privileged,
+    readonly_rootfs: host.ReadonlyRootfs,
+    cap_drop: capDrop,
+    cap_add: capAdd,
+    security_options: securityOptions,
+    bind_count: (host.Binds ?? []).length,
+    mount_count: (inspect.Mounts ?? []).length,
+    port_binding_count: Object.keys(portBindings).length,
+    exposed_port_count: Object.keys(exposedPorts).length,
+    pids_limit: host.PidsLimit,
+    memory_bytes: host.Memory,
+    nano_cpus: host.NanoCpus,
+    tmpfs: tmpfs
+  };
 }
 
 async function reserveFixtureEvidenceRun(
@@ -852,12 +999,14 @@ function assertFixtureRecoveryState(
   }
   const recovery = value as Partial<FixtureRecoveryState>;
   if (
-    recovery.schemaVersion !== 1 ||
+    recovery.schemaVersion !== 2 ||
     recovery.evidenceRunDirectory !== expectedRunDirectory ||
     !recovery.dockerEndpoint ||
     typeof recovery.dockerEndpoint.context !== "string" ||
     typeof recovery.dockerEndpoint.endpoint !== "string" ||
     !isLocalUnixDockerEndpoint(recovery.dockerEndpoint.endpoint) ||
+    typeof recovery.dockerEndpoint.daemonId !== "string" ||
+    !isSafeDockerDaemonId(recovery.dockerEndpoint.daemonId) ||
     !["context", "DOCKER_CONTEXT", "DOCKER_HOST"].includes(
       recovery.dockerEndpoint.source ?? ""
     ) ||

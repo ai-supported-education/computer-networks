@@ -108,8 +108,8 @@ reply. Expected и observed остаются разными.
    при hash mismatch, неизвестном origin, неожиданном network access, cleanup без
    `exact_container_absent=true` или расхождении raw/companion. Fixture не
    изменяйте. При cleanup failure используйте только напечатанную команду с
-   failed run directory; recovery сверит сохранённые Docker endpoint, reserved
-   name, run label и container ID:
+   failed run directory; recovery сверит сохранённые Docker endpoint, Engine ID,
+   reserved name, run label и container ID и дождётся bounded clean quiescence:
 
    ```bash
    pnpm network:fixture cleanup .training/evidence/01-06/<failed-run-id>

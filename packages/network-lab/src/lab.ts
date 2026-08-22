@@ -15,11 +15,14 @@ import {
 import { runCommand, tryCommand } from "./command.js";
 import {
   ipv4CidrsOverlap,
+  isNoSuchDockerObject,
   requireLocalDockerEndpoint,
+  requireMatchingDockerEndpoint,
   type DockerEndpointInventory
 } from "./docker-safety.js";
 import {
   appendEvent,
+  getReservedContainerCleanupOrder,
   readState,
   readStateIfPresent,
   removeState,
@@ -27,8 +30,10 @@ import {
   runPath,
   saveState,
   writeRunArtifact,
+  type DockerResourceReservation,
   type LabState
 } from "./state.js";
+import { waitForCleanupQuiescence } from "./reconciliation.js";
 
 interface PreflightResult {
   checkedAt: string;
@@ -102,6 +107,9 @@ const BETA_ARP_OR_ICMP_FILTER =
   `(arp and (arp[14:4] = 0xac1e0014 or arp[24:4] = 0xac1e0014)) ` +
   `or (icmp and host ${LAB_ENDPOINTS.beta.ipv4})`;
 const CAPTURE_CONTAINER_PATH = "/evidence/capture.pcap";
+const CLEANUP_QUIET_PERIOD_MS = 3_000;
+const CLEANUP_RECONCILIATION_TIMEOUT_MS = 15_000;
+const CLEANUP_POLL_INTERVAL_MS = 250;
 
 export async function preloadImage(): Promise<void> {
   await requireLocalDockerEndpoint();
@@ -243,7 +251,7 @@ export async function preflightLab(root: string): Promise<PreflightResult> {
   process.stdout.write(
     [
       "PASS network lab preflight",
-      `docker_context=${dockerEndpoint.context} endpoint=${dockerEndpoint.endpoint} endpoint_source=${dockerEndpoint.source}`,
+      `docker_context=${dockerEndpoint.context} endpoint=${dockerEndpoint.endpoint} endpoint_source=${dockerEndpoint.source} daemon_id=${dockerEndpoint.daemonId}`,
       `docker=${dockerVersion} server=${serverOs}/${serverArch}`,
       `image=${LAB_IMAGE}`,
       `image_id=${imageId}`,
@@ -302,6 +310,7 @@ export async function upLab(
       kind: "action",
       detail: "begin exact network creation for cn-lab"
     });
+    await assertStateDockerEndpoint(state);
     const network = await runCommand(
       "docker",
       [
@@ -321,37 +330,35 @@ export async function upLab(
         `${LAB_RUN_LABEL_KEY}=${state.runId}`,
         "--label",
         `${LAB_ROLE_LABEL_KEY}=network`,
-        "cn-lab"
+        state.network.name
       ],
       { timeoutMs: 15_000 }
     );
-    state.networkId = network.stdout.trim();
-    assertDockerId(state.networkId);
+    state.network.id = network.stdout.trim();
+    assertDockerId(state.network.id);
     await saveState(root, state);
 
-    state.containerIds.alpha = await createEndpoint(
+    await createEndpoint(
+      root,
       state,
-      "cn-alpha",
+      state.containers.alpha,
       LAB_ENDPOINTS.alpha.ipv4,
-      LAB_ENDPOINTS.alpha.mac,
-      "alpha"
+      LAB_ENDPOINTS.alpha.mac
     );
-    await saveState(root, state);
-    state.containerIds.beta = await createEndpoint(
+    await createEndpoint(
+      root,
       state,
-      "cn-beta",
+      state.containers.beta,
       LAB_ENDPOINTS.beta.ipv4,
-      LAB_ENDPOINTS.beta.mac,
-      "beta"
+      LAB_ENDPOINTS.beta.mac
     );
-    await saveState(root, state);
     await runCommand(
       "docker",
       [
         "container",
         "start",
-        state.containerIds.alpha,
-        state.containerIds.beta
+        requireId(state.containers.alpha.id, "alpha"),
+        requireId(state.containers.beta.id, "beta")
       ],
       { timeoutMs: 15_000 }
     );
@@ -404,7 +411,7 @@ export async function captureLab(root: string): Promise<void> {
     if (!state.baselinePassed) {
       await collectAndSaveBaseline(root, state);
     }
-    const alphaId = requireId(state.containerIds.alpha, "alpha");
+    const alphaId = requireId(state.containers.alpha.id, "alpha");
     await appendEvent(root, state, {
       phase: "cold",
       kind: "expected",
@@ -448,7 +455,7 @@ export async function shellLab(
   await assertStateDockerEndpoint(state);
   const isSource = endpoint === "src" || endpoint === "alpha";
   const containerId = requireId(
-    isSource ? state.containerIds.alpha : state.containerIds.beta,
+    isSource ? state.containers.alpha.id : state.containers.beta.id,
     isSource ? "alpha" : "beta"
   );
   process.stderr.write(
@@ -474,14 +481,10 @@ export async function downLab(root: string): Promise<void> {
     detail: "remove only state-recorded resources after label verification"
   });
   const failures: string[] = [];
-  const containers = [
-    ...state.containerIds.helpers.slice().reverse(),
-    state.containerIds.beta,
-    state.containerIds.alpha
-  ].filter((id): id is string => id !== null);
-  for (const id of containers) {
+  const containers = getReservedContainerCleanupOrder(state);
+  for (const reservation of containers) {
     try {
-      await removeExactContainer(state, id);
+      await removeExactContainer(state, reservation);
     } catch (error) {
       failures.push(formatError(error));
     }
@@ -493,12 +496,10 @@ export async function downLab(root: string): Promise<void> {
       failures.push(formatError(error));
     }
   }
-  if (state.networkId) {
-    try {
-      await removeExactNetwork(state, state.networkId);
-    } catch (error) {
-      failures.push(formatError(error));
-    }
+  try {
+    await removeExactNetwork(state, state.network);
+  } catch (error) {
+    failures.push(formatError(error));
   }
   if (failures.length > 0) {
     await appendEvent(root, state, {
@@ -509,6 +510,8 @@ export async function downLab(root: string): Promise<void> {
     throw new Error(failures.join("\n"));
   }
 
+  const reconciliation = await reconcileReservedResources(state);
+  await assertStateDockerEndpoint(state);
   const resources = await labelledResources();
   const postCheck = [
     `checked_at=${new Date().toISOString()}`,
@@ -518,6 +521,9 @@ export async function downLab(root: string): Promise<void> {
     "exact_state_containers=0",
     "exact_state_networks=0",
     "exact_state_volumes=0",
+    `reconciliation_quiet_ms=${CLEANUP_QUIET_PERIOD_MS}`,
+    `reconciliation_observations=${reconciliation.observations}`,
+    `reconciliation_removals=${reconciliation.removals}`,
     `labelled_containers=${resources.containerRows.length}`,
     `labelled_networks=${resources.networkRows.length}`,
     `labelled_volumes=${resources.volumeRows.length}`
@@ -746,22 +752,18 @@ export async function statusLab(root: string): Promise<void> {
 }
 
 async function assertStateDockerEndpoint(state: LabState): Promise<void> {
-  const current = await requireLocalDockerEndpoint();
-  if (current.endpoint !== state.dockerEndpoint.endpoint) {
-    throw new Error(
-      `Refuse Docker action: active state belongs to ${state.dockerEndpoint.endpoint}, current local endpoint is ${current.endpoint}. Restore the original Docker context first.`
-    );
-  }
+  await requireMatchingDockerEndpoint(state.dockerEndpoint);
 }
 
 async function createEndpoint(
+  root: string,
   state: LabState,
-  name: string,
+  reservation: DockerResourceReservation,
   ipv4: string,
-  mac: string,
-  role: "alpha" | "beta"
-): Promise<string> {
-  const networkId = requireId(state.networkId, "network");
+  mac: string
+): Promise<void> {
+  await assertStateDockerEndpoint(state);
+  const networkId = requireId(state.network.id, "network");
   const created = await runCommand(
     "docker",
     [
@@ -770,13 +772,13 @@ async function createEndpoint(
       "--pull",
       "never",
       "--name",
-      name,
+      reservation.name,
       "--label",
       `${LAB_LABEL_KEY}=${LAB_OWNER_LABEL}`,
       "--label",
       `${LAB_RUN_LABEL_KEY}=${state.runId}`,
       "--label",
-      `${LAB_ROLE_LABEL_KEY}=${role}`,
+      `${LAB_ROLE_LABEL_KEY}=${reservation.role}`,
       "--network",
       networkId,
       "--ip",
@@ -804,7 +806,8 @@ async function createEndpoint(
   );
   const id = created.stdout.trim();
   assertDockerId(id);
-  return id;
+  reservation.id = id;
+  await saveState(root, state);
 }
 
 async function collectAndSaveBaseline(
@@ -820,9 +823,9 @@ async function collectAndSaveBaseline(
     detail:
       "both fixed endpoints are running with eth0 UP, exact IPv4/MAC, no default route or global IPv6"
   });
-  const networkId = requireId(state.networkId, "network");
-  const alphaId = requireId(state.containerIds.alpha, "alpha");
-  const betaId = requireId(state.containerIds.beta, "beta");
+  const networkId = requireId(state.network.id, "network");
+  const alphaId = requireId(state.containers.alpha.id, "alpha");
+  const betaId = requireId(state.containers.beta.id, "beta");
   const network = (
     JSON.parse(
       (
@@ -1003,7 +1006,7 @@ async function capturePhase(
   state: LabState,
   phase: "cold" | "warm"
 ): Promise<void> {
-  const alphaId = requireId(state.containerIds.alpha, "alpha");
+  const alphaId = requireId(state.containers.alpha.id, "alpha");
   const phaseDirectory = runPath(root, state, phase);
   const pcapPath = path.join(phaseDirectory, "capture.pcap");
   const before = await runCommand(
@@ -1264,6 +1267,17 @@ async function createHelper(
   mounts: string[] = []
 ): Promise<string> {
   const name = `cn-${role}-${state.runId.slice(-8)}`;
+  if (
+    state.containers.helpers.some(
+      (reservation) => reservation.name === name
+    )
+  ) {
+    throw new Error(`Helper reservation ${name} уже существует в active state.`);
+  }
+  const reservation: DockerResourceReservation = { name, role, id: null };
+  state.containers.helpers.push(reservation);
+  await saveState(root, state);
+  await assertStateDockerEndpoint(state);
   const args = [
     "container",
     "create",
@@ -1306,7 +1320,7 @@ async function createHelper(
   const created = await runCommand("docker", args, { timeoutMs: 15_000 });
   const id = created.stdout.trim();
   assertDockerId(id);
-  state.containerIds.helpers.push(id);
+  reservation.id = id;
   await saveState(root, state);
   return id;
 }
@@ -1452,9 +1466,15 @@ async function removeAndForgetHelpers(
   ids: string[]
 ): Promise<void> {
   for (const id of ids) {
-    await removeExactContainer(state, id);
-    state.containerIds.helpers = state.containerIds.helpers.filter(
-      (candidate) => candidate !== id
+    const reservation = state.containers.helpers.find(
+      (candidate) => candidate.id === id
+    );
+    if (!reservation) {
+      throw new Error(`Helper ${id} отсутствует в persisted reservations.`);
+    }
+    await removeExactContainer(state, reservation);
+    state.containers.helpers = state.containers.helpers.filter(
+      (candidate) => candidate !== reservation
     );
     await saveState(root, state);
   }
@@ -1475,6 +1495,7 @@ async function createCaptureVolume(
   // succeeds and the command fails, the outer cleanup still knows what to inspect.
   state.volumeNames.push(name);
   await saveState(root, state);
+  await assertStateDockerEndpoint(state);
   if ((await inspectCaptureVolume(name)) !== null) {
     throw new Error(
       `Exact capture volume name ${name} уже занят; existing volume не изменён.`
@@ -1500,7 +1521,7 @@ async function createCaptureVolume(
       `Docker volume create вернул unexpected name: ${created.stdout.trim()}`
     );
   }
-  const labels = await inspectCaptureVolume(name);
+  const labels = await inspectCaptureVolume(name, true);
   if (
     labels?.owner !== LAB_OWNER_LABEL ||
     labels.run !== state.runId ||
@@ -1525,65 +1546,120 @@ async function removeAndForgetVolume(
 
 async function removeExactContainer(
   state: LabState,
-  id: string
-): Promise<void> {
-  assertDockerId(id);
+  reservation: DockerResourceReservation
+): Promise<boolean> {
   const inspected = await tryCommand(
     "docker",
     [
       "container",
       "inspect",
-      id,
+      reservation.name,
       "--format",
-      `{{index .Config.Labels "${LAB_RUN_LABEL_KEY}"}}`
+      `{{.Id}}|{{.Name}}|{{index .Config.Labels "${LAB_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_ROLE_LABEL_KEY}"}}|{{index .Config.Labels "${LAB_RUN_LABEL_KEY}"}}`
     ],
-    { timeoutMs: 10_000 }
+    { timeoutMs: 10_000, log: false }
   );
-  if (inspected.exitCode !== 0) return;
-  if (inspected.stdout.trim() !== state.runId) {
+  if (inspected.exitCode !== 0) {
+    if (isNoSuchDockerObject(inspected, "container")) return false;
     throw new Error(
-      `Refuse cleanup: container ${id} run label mismatch.`
+      `Container ${reservation.name} inspect failed: ${inspected.stderr || inspected.stdout}`
+    );
+  }
+  const [id, observedName, owner, role, run] = inspected.stdout
+    .trim()
+    .split("|");
+  assertDockerId(id ?? "");
+  if (
+    observedName !== `/${reservation.name}` ||
+    owner !== LAB_OWNER_LABEL ||
+    role !== reservation.role ||
+    run !== state.runId ||
+    (reservation.id !== null && reservation.id !== id)
+  ) {
+    throw new Error(
+      `Refuse cleanup: container ${reservation.name} не совпадает с persisted name/ID/owner/run/role identity.`
     );
   }
   await runCommand(
     "docker",
-    ["container", "rm", "--volumes", "--force", id],
+    ["container", "rm", "--volumes", "--force", id!],
     { timeoutMs: 15_000 }
   );
+  const remaining = await tryCommand(
+    "docker",
+    ["container", "inspect", id!, "--format", "{{.Id}}"],
+    { timeoutMs: 10_000, log: false }
+  );
+  if (
+    remaining.exitCode === 0 ||
+    !isNoSuchDockerObject(remaining, "container")
+  ) {
+    throw new Error(
+      `Container ${id} absence post-check failed: ${remaining.stderr || remaining.stdout}`
+    );
+  }
+  return true;
 }
 
 async function removeExactNetwork(
   state: LabState,
-  id: string
-): Promise<void> {
-  assertDockerId(id);
+  reservation: DockerResourceReservation
+): Promise<boolean> {
   const inspected = await tryCommand(
     "docker",
     [
       "network",
       "inspect",
-      id,
+      reservation.name,
       "--format",
-      `{{index .Labels "${LAB_RUN_LABEL_KEY}"}}`
+      `{{.Id}}|{{.Name}}|{{index .Labels "${LAB_LABEL_KEY}"}}|{{index .Labels "${LAB_ROLE_LABEL_KEY}"}}|{{index .Labels "${LAB_RUN_LABEL_KEY}"}}`
     ],
-    { timeoutMs: 10_000 }
+    { timeoutMs: 10_000, log: false }
   );
-  if (inspected.exitCode !== 0) return;
-  if (inspected.stdout.trim() !== state.runId) {
-    throw new Error(`Refuse cleanup: network ${id} run label mismatch.`);
+  if (inspected.exitCode !== 0) {
+    if (isNoSuchDockerObject(inspected, "network")) return false;
+    throw new Error(
+      `Network ${reservation.name} inspect failed: ${inspected.stderr || inspected.stdout}`
+    );
   }
-  await runCommand("docker", ["network", "rm", id], {
+  const [id, observedName, owner, role, run] = inspected.stdout
+    .trim()
+    .split("|");
+  assertDockerId(id ?? "");
+  if (
+    observedName !== reservation.name ||
+    owner !== LAB_OWNER_LABEL ||
+    role !== reservation.role ||
+    run !== state.runId ||
+    (reservation.id !== null && reservation.id !== id)
+  ) {
+    throw new Error(
+      `Refuse cleanup: network ${reservation.name} не совпадает с persisted name/ID/owner/run/role identity.`
+    );
+  }
+  await runCommand("docker", ["network", "rm", id!], {
     timeoutMs: 15_000
   });
+  const remaining = await tryCommand(
+    "docker",
+    ["network", "inspect", id!, "--format", "{{.Id}}"],
+    { timeoutMs: 10_000, log: false }
+  );
+  if (remaining.exitCode === 0 || !isNoSuchDockerObject(remaining, "network")) {
+    throw new Error(
+      `Network ${id} absence post-check failed: ${remaining.stderr || remaining.stdout}`
+    );
+  }
+  return true;
 }
 
 async function removeExactVolume(
   state: LabState,
   name: string
-): Promise<void> {
+): Promise<boolean> {
   assertCaptureVolumeName(name);
   const labels = await inspectCaptureVolume(name);
-  if (labels === null) return;
+  if (labels === null) return false;
   if (
     labels.owner !== LAB_OWNER_LABEL ||
     labels.run !== state.runId ||
@@ -1594,12 +1670,39 @@ async function removeExactVolume(
   await runCommand("docker", ["volume", "rm", name], {
     timeoutMs: 15_000
   });
-  if ((await inspectCaptureVolume(name)) !== null) {
+  if ((await inspectCaptureVolume(name, false)) !== null) {
     throw new Error(`Volume ${name} всё ещё существует после exact cleanup.`);
   }
+  return true;
 }
 
-async function inspectCaptureVolume(name: string): Promise<{
+async function reconcileReservedResources(state: LabState): Promise<{
+  observations: number;
+  removals: number;
+}> {
+  const containers = getReservedContainerCleanupOrder(state);
+  return waitForCleanupQuiescence(
+    async () => {
+      let removals = 0;
+      for (const reservation of containers) {
+        if (await removeExactContainer(state, reservation)) removals += 1;
+      }
+      for (const name of state.volumeNames) {
+        if (await removeExactVolume(state, name)) removals += 1;
+      }
+      if (await removeExactNetwork(state, state.network)) removals += 1;
+      const labelled = await labelledResources(true);
+      return { clean: isLabelledPostCheckClean(labelled), removals };
+    },
+    {
+      quietPeriodMs: CLEANUP_QUIET_PERIOD_MS,
+      timeoutMs: CLEANUP_RECONCILIATION_TIMEOUT_MS,
+      pollIntervalMs: CLEANUP_POLL_INTERVAL_MS
+    }
+  );
+}
+
+async function inspectCaptureVolume(name: string, log = true): Promise<{
   owner: string;
   run: string;
   role: string;
@@ -1614,7 +1717,7 @@ async function inspectCaptureVolume(name: string): Promise<{
       "--format",
       `{{index .Labels "${LAB_LABEL_KEY}"}}\t{{index .Labels "${LAB_RUN_LABEL_KEY}"}}\t{{index .Labels "${LAB_ROLE_LABEL_KEY}"}}`
     ],
-    { timeoutMs: 10_000 }
+    { timeoutMs: 10_000, log }
   );
   if (inspected.exitCode !== 0) {
     if (/no such volume/i.test(`${inspected.stdout}\n${inspected.stderr}`)) {
@@ -1640,8 +1743,8 @@ function validateNetwork(
   const alphaEndpoint = containers[alphaId];
   const betaEndpoint = containers[betaId];
   if (
-    network.Id !== state.networkId ||
-    network.Name !== "cn-lab" ||
+    network.Id !== state.network.id ||
+    network.Name !== state.network.name ||
     network.Driver !== "bridge" ||
     network.Internal !== true ||
     network.EnableIPv6 !== false ||
@@ -1761,7 +1864,7 @@ async function inspectNetworkSubnets(): Promise<{
   };
 }
 
-async function labelledResources(): Promise<{
+async function labelledResources(quiet = false): Promise<{
   containerRows: string[];
   networkRows: string[];
   volumeRows: string[];
@@ -1778,7 +1881,7 @@ async function labelledResources(): Promise<{
       "--format",
       "{{.ID}}\t{{.Names}}\t{{.Status}}"
     ],
-    { timeoutMs: 10_000 }
+    { timeoutMs: 10_000, log: !quiet }
   );
   const networks = await runCommand(
     "docker",
@@ -1790,7 +1893,7 @@ async function labelledResources(): Promise<{
       "--format",
       "{{.ID}}\t{{.Name}}\t{{.Driver}}"
     ],
-    { timeoutMs: 10_000 }
+    { timeoutMs: 10_000, log: !quiet }
   );
   const volumes = await runCommand(
     "docker",
@@ -1802,7 +1905,7 @@ async function labelledResources(): Promise<{
       "--format",
       "{{.Name}}\t{{.Driver}}"
     ],
-    { timeoutMs: 10_000 }
+    { timeoutMs: 10_000, log: !quiet }
   );
   return {
     containerRows: nonemptyLines(containers.stdout),
