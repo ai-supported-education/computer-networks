@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { validateNetworkEvidence } from "@training/network-lab/evidence";
 import { hashDirectory } from "./content-hash.js";
 import { readSupportFile, type SupportLoader } from "./support.js";
 import type { CheckLabel, CheckResult, CheckRun, FlatSession } from "./types.js";
@@ -66,6 +67,19 @@ async function runCheck(
 
   if (label === "quiz") {
     return runQuiz(root, session, supportLoader);
+  }
+
+  if (label === "network-evidence") {
+    const validation = await validateNetworkEvidence(
+      getSessionDirectory(root, session),
+      session.definition.id
+    );
+    return {
+      label,
+      status: validation.ok ? "passed" : "failed",
+      exitCode: validation.ok ? 0 : 1,
+      output: validation.messages.join("\n")
+    };
   }
 
   const moduleDirectory = getModuleDirectory(root, session);

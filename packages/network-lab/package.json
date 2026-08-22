@@ -1,14 +1,14 @@
 {
-  "name": "@training/session-runner",
+  "name": "@training/network-lab",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./evidence": "./src/evidence.ts"
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "@training/network-lab": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "26.2.0",

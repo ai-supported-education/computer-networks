@@ -1,87 +1,100 @@
-# AI-supported course template
+# Компьютерные сети: от пакета к диагностике
 
-Базовый шаблон для репозитория учебного курса, который проходится в IDE короткими
-сессиями. Это не готовый курс: после создания репозитория замените демонстрационный
-module, этот корневой README и repository metadata, затем заполните
-`curriculum/course.json` своей программой.
+Практический IPv4-only курс для разработчика, который пользуется Git, shell и
+Docker, но ещё не имеет единой системной модели сетевого пути.
 
-Шаблон не предполагает, что любое обучение является code exercise: доступны
-каркасы для quiz, derivation, measurement lab и diagnostic. Общие правила
-компонуются profiles для software, переходного обучения, количественных задач,
-лабораторий, сетей и RF.
+Курс идёт от одного synthetic packet exchange внутри одной LAN к production
+request path через switching, routing, UDP/TCP, DNS, firewall/NAT, TLS, reverse
+proxy и Docker. Финальный навык — не вспомнить случайную команду, а выбрать
+минимальную различающую проверку, локализовать failure и доказать recovery
+сохранённым evidence.
 
-Он сохраняет два важных разделения:
+Подробная модель учащегося, language policy и границы v1 зафиксированы в
+[audience](curriculum/audience.md). Требования к macOS/Linux, arm64/amd64,
+Docker/Linux labs, packet captures и cleanup находятся в
+[lab environment](curriculum/lab-environment.md).
 
-- автоматический `pnpm session:check` проверяет воспроизводимые факты локально;
-- Codex-review проверяет смысл, объяснение и качество решения отдельным шагом.
+## Маршрут
 
-Подсказки, ключи quiz и reference solutions живут в Git ref `course-support`, а не
-рядом с упражнением. Это предотвращает случайные спойлеры при работе в IDE.
+Canonical order и concept graph находятся в [course.json](curriculum/course.json).
+Маршрут состоит из 71 independently finishable session по 35–55 минут:
 
-## Создать новый курс
+1. Один packet в одной LAN — 6 sessions.
+2. IPv4, CIDR и route choice — 7.
+3. Switching, VLAN и DHCP — 6.
+4. Routing, ICMP и MTU — 7.
+5. UDP и TCP — 8.
+6. DNS — 6.
+7. NAT и firewall — 7.
+8. HTTP, TLS и proxy — 7.
+9. Docker networking — 6.
+10. Diagnosis и performance — 6.
+11. Capstone — 5.
 
-Нажмите **Use this template** на GitHub, затем в новом репозитории:
+Nominal time — 3525 минут, около 58 часов 45 минут; полный проход с повторными
+runs и review рассчитан примерно на 59–65 часов.
 
-    pnpm install
+Первые шесть sessions образуют один published authoring prefix. Остальные entries
+имеют releaseStatus planned: они фиксируют outcome и зависимости, но runner не
+выдаёт их как готовый learner material. Published status в feature branch ещё не
+означает публичную готовность: каждая карточка и весь module должны получить
+актуальный independent content-review PASS.
+
+## Как проходить
+
+После установки dependencies:
+
     pnpm session:validate
     pnpm session:next
+    pnpm session:start <id>
 
-Далее пройдите [руководство автора](docs/authoring-a-course.md). Сначала задайте
-аудиторию и карту курса, затем подготовьте только первую реальную сессию. Остальные
-карточки можно описать в manifest как `releaseStatus: "planned"`: runner покажет
-их в общей статистике, но не выдаст учащемуся незрелые материалы. При публикации
-карточка получает полный DONE/checks/evidence-контракт.
+В активной карточке:
 
-GitHub переносит из template только default branch, поэтому сразу создайте ref для
-закрытых от случайного просмотра материалов:
+    pnpm session:check
+    pnpm session:review
+    pnpm session:finish
 
-    git switch -c course-support
-    git push -u origin course-support
-    git switch -
+Session начинается и заканчивается green/safe state, создаёт named evidence и не
+оставляет обязательного хвоста. Runner хранит personal progress локально и не
+применяет solution. Progressive hints выдаются по одному командой
+pnpm session:hint; quiz keys, hints и reference solutions не находятся в default
+branch.
 
-После этого добавляйте hints, ключи quiz и reference solutions только в эту ветку.
+## Практика и безопасность
 
-## Структура
+Обязательные labs запускаются в synthetic Docker/Linux topologies. Default scope
+не включает Internet targets, host networking, Docker socket, privileged
+containers, реальные credentials или пользовательский traffic. Packet evidence
+имеет bounded capture contract, provenance, SHA-256 и текстовый tshark companion.
+Каждое изменение начинается с preflight/baseline и заканчивается cleanup плюс
+post-check.
 
-- `curriculum/course.json` — порядок, длительность и условия DONE;
-- `docs/course-profiles/` — выбранные в manifest общие контракты;
-- `templates/sessions/` — каркасы разных типов evidence;
-- `modules/` и `capstone/` — learner-facing материалы и упражнения;
-- `packages/session-runner/` — локальный runner прогресса и checks;
-- ветка `course-support` — progressive hints, quiz keys и reference solutions;
-- [AGENTS.md](AGENTS.md) — контракт для Codex во время обучения и authoring.
+Курс vendor-neutral. MikroTik и RouterOS находятся вне scope: материал не содержит
+RouterOS commands, не подключается к домашнему или production router и не меняет
+его configuration.
 
-Полная схема файлов — в [repository-layout.md](docs/repository-layout.md).
+## Ограничение IPv4-only
 
-## Independent content-review
+Изучаемое поведение не является универсальным свойством любого IP traffic. В v1
+не входят IPv6, Neighbor Discovery, SLAAC и dual-stack selection; ARP, broadcast,
+IPv4 fragmentation и address semantics нельзя переносить на IPv6 по аналогии.
 
-После создания или существенного изменения карточки соберите author packet:
+Также вне v1 находятся Wi-Fi/RF, OSPF/BGP, VPN/tunnels, Kubernetes/CNI, service
+mesh, vendor-specific cloud networking, QUIC/HTTP/3 и offensive/disruptive
+testing. Эти темы перечислены как course exclusions, а не как session defers:
+manifest разрешает defer только concept, который действительно вводится позже.
 
-    pnpm author:content-review session 01-01
-    pnpm author:content-review module 01
+## Authoring и review
 
-Родительский Codex запускает нового subagent без истории генерации. Reviewer
-сначала читает blind learner packet, затем проверяет связность с profiles, rubric,
-checks/evidence и соседними карточками. CLI сам агента не запускает; полный verdict
-и report хранятся локально в `.authoring/`, а команда `attest` публикует компактное
-hash-свидетельство. Подробнее — в
-[content-review protocol](curriculum/content-review-protocol.md).
+Правила материала задают [authoring standard](curriculum/authoring-standard.md),
+[session contract](curriculum/session-contract.md) и profiles lab, quantitative,
+network-safety, networking.
 
-## Стековые правила
+После создания или существенного изменения learner-facing session:
 
-Базовый шаблон намеренно не привязан к фронтенду, FSD или React. Выберите
-[компонуемые profiles](docs/course-profiles/README.md); сравнение с предыдущим
-стеком добавляйте только через `transition`, когда оно действительно помогает
-понять новую модель.
+    pnpm author:content-review session <id>
+    pnpm author:content-review module <module-id>
 
-Для React-курса есть отдельный [профиль](docs/stack-profiles/react.md). Только он
-описывает, как и когда уместно преподавать Feature-Sliced Design.
-
-## Personal progress
-
-Официальный course repository остаётся чистым: учащийся держит решения и
-`answers.json` в личном fork, в ветке `progress/<name>`. После создания fork он
-добавляет официальный курс как `upstream`, делает `git fetch upstream` и запускает
-`pnpm course:sync` из чистой progress-ветки. Команда обновляет personal `master` из
-upstream и вливает его в текущую progress-ветку, не создавая коммитов с решениями в
-официальном репозитории.
+Fresh reviewer сначала читает blind learner packet, затем проверяет concept graph,
+profiles, rubric, checks/evidence и соседние карточки. Никакая expected строка в
+README не считается observed result учащегося.

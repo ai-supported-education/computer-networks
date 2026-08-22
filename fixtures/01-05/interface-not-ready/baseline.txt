@@ -1,0 +1,4 @@
+capture_point=alpha:eth0
+eth0 state DOWN
+ipv4=not-observed
+neighbor_172.30.0.20=not-observed

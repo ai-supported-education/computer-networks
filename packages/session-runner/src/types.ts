@@ -23,6 +23,7 @@ export type SessionKind = (typeof SESSION_KINDS)[number];
 export const CHECK_LABELS = [
   "quiz",
   "review",
+  "network-evidence",
   "typecheck",
   "unit",
   "integration"

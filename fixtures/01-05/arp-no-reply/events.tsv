@@ -1,0 +1,4 @@
+frame	elapsed_ms	protocol	observation
+1	0	ARP	request who-has 172.30.0.20 tell 172.30.0.10
+2	500	ARP	request who-has 172.30.0.20 tell 172.30.0.10
+3	1000	ARP	request who-has 172.30.0.20 tell 172.30.0.10

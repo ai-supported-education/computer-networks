@@ -1,17 +1,34 @@
 {
   "version": 1,
   "language": "ru",
-  "audience": "{{ опишите входные знания учащегося }}",
-  "profiles": [],
-  "courseContextFiles": [],
-  "assumedConcepts": [],
+  "audience": "Практикующий разработчик с Git, shell, Docker и Docker Compose, но без предполагаемой системной модели Ethernet, IPv4, routing, transport protocols, DNS, NAT, TLS или packet analysis.",
+  "profiles": [
+    "lab",
+    "quantitative",
+    "network-safety",
+    "networking"
+  ],
+  "courseContextFiles": [
+    "curriculum/audience.md",
+    "curriculum/lab-environment.md",
+    "docs/fixture-catalog.md"
+  ],
+  "assumedConcepts": [
+    "shell-basics",
+    "text-files",
+    "git-basics",
+    "docker-basics",
+    "docker-compose-basics",
+    "process-basics",
+    "integer-arithmetic"
+  ],
   "estimatedHours": {
-    "min": 1,
-    "max": 1
+    "min": 59,
+    "max": 65
   },
   "sessionPolicy": {
-    "minMinutes": 30,
-    "maxMinutes": 60,
+    "minMinutes": 35,
+    "maxMinutes": 55,
     "singleActiveSession": true,
     "dependencyMode": "linear-by-default",
     "startState": "green",
@@ -20,24 +37,993 @@
   "modules": [
     {
       "id": "01",
-      "slug": "replace-me",
-      "title": "Замените демонстрационный раздел",
-      "goal": "Сформулируйте первый измеримый результат будущего курса.",
+      "slug": "one-packet-one-lan",
+      "title": "Один packet в одной LAN",
+      "goal": "Научиться читать и объяснять bounded packet evidence внутри заранее заданной LAN без скрытых CIDR, route lookup или switching prerequisites.",
       "sessions": [
         {
           "id": "01-01",
-          "title": "Замените демонстрационную карточку",
-          "minutes": 30,
+          "releaseStatus": "published",
+          "title": "Различить interface, адреса и вложенные сообщения",
+          "minutes": 40,
           "kind": "observe",
-          "outcome": "Учащийся получает первую реальную завершённую карточку.",
-          "done": "Демонстрационный module заменён автором до публикации курса.",
-          "checks": ["review"],
+          "outcome": "Учащийся различает interface, source/destination MAC, source/destination IPv4, Ethernet frame, IPv4 datagram и ICMP message и восстанавливает их encapsulation.",
+          "done": "Во всех quiz scenarios заполнены answers и собственные reasons; interface, MAC, IPv4, frame, datagram и ICMP не смешаны; направление encapsulation и decapsulation объяснено причинно; quiz и agent review пройдены.",
+          "checks": [
+            "quiz",
+            "review"
+          ],
           "evidence": {
-            "produces": ["README и rubric первой реальной карточки"],
-            "verifiedBy": ["agent"]
+            "produces": [
+              "answers.json"
+            ],
+            "verifiedBy": [
+              "automated",
+              "agent"
+            ]
           },
-          "requires": [],
-          "introduces": ["first-real-session"],
+          "requires": [
+            "shell-basics",
+            "text-files"
+          ],
+          "introduces": [
+            "network-interface",
+            "mac-address",
+            "ipv4-address",
+            "ethernet-frame",
+            "ipv4-datagram",
+            "icmp-echo",
+            "encapsulation"
+          ],
+          "defers": [
+            "arp-neighbor-resolution",
+            "cidr-prefix",
+            "route-lookup",
+            "switch-forwarding"
+          ]
+        },
+        {
+          "id": "01-02",
+          "releaseStatus": "published",
+          "title": "Доказать baseline изолированной LAN",
+          "minutes": 45,
+          "kind": "configure",
+          "outcome": "Учащийся запускает разрешённую isolated Docker LAN, сохраняет baseline interfaces, MAC, IPv4 и link state, затем доказывает полный teardown.",
+          "done": "Preflight подтверждает exact Compose project, services, architecture и capabilities; evidence/baseline.md содержит observed interfaces, MAC, IPv4 и link state; evidence/post-check.md подтверждает teardown без затрагивания чужих Docker resources; network-evidence и agent review пройдены.",
+          "checks": [
+            "network-evidence",
+            "review"
+          ],
+          "evidence": {
+            "produces": [
+              "evidence/baseline.md",
+              "evidence/post-check.md"
+            ],
+            "verifiedBy": [
+              "automated",
+              "empirical",
+              "agent"
+            ]
+          },
+          "requires": [
+            "docker-basics",
+            "docker-compose-basics",
+            "network-interface",
+            "ipv4-address"
+          ],
+          "introduces": [
+            "isolated-lan-lab",
+            "network-baseline",
+            "link-state-evidence",
+            "safe-lab-lifecycle",
+            "epistemic-evidence"
+          ],
+          "defers": [
+            "packet-capture",
+            "arp-neighbor-resolution",
+            "switch-forwarding"
+          ]
+        },
+        {
+          "id": "01-03",
+          "releaseStatus": "published",
+          "title": "Разобрать synthetic capture по полям",
+          "minutes": 45,
+          "kind": "observe",
+          "outcome": "Учащийся воспроизводимо извлекает tshark fields из deterministic pcap и строит frame-map Ethernet → IPv4 → ICMP.",
+          "done": "Fixture provenance и SHA-256 зафиксированы; tshark command и normalized fields воспроизводимы; frame-map.md связывает фактические Ethernet, IPv4 и ICMP fields с protocol boundaries и проверяемой length arithmetic; observations, inference и unknowns разделены; network-evidence и review пройдены.",
+          "checks": [
+            "network-evidence",
+            "review"
+          ],
+          "evidence": {
+            "produces": [
+              "frame-map.md"
+            ],
+            "verifiedBy": [
+              "automated",
+              "empirical",
+              "agent"
+            ]
+          },
+          "requires": [
+            "ethernet-frame",
+            "ipv4-datagram",
+            "icmp-echo",
+            "encapsulation",
+            "network-baseline",
+            "epistemic-evidence"
+          ],
+          "introduces": [
+            "packet-capture",
+            "tshark-field-extraction",
+            "packet-field-evidence",
+            "deterministic-fixture",
+            "frame-map",
+            "ethertype",
+            "protocol-number",
+            "ipv4-header"
+          ],
+          "defers": [
+            "arp-neighbor-resolution",
+            "switch-forwarding"
+          ]
+        },
+        {
+          "id": "01-04",
+          "releaseStatus": "published",
+          "title": "Сравнить cold и warm neighbor paths",
+          "minutes": 55,
+          "kind": "experiment",
+          "outcome": "Учащийся по двум bounded live captures доказывает, как neighbor cache меняет ARP+ICMP sequence при cold и warm run.",
+          "done": "Expected записан до первого start marker; cache reset ограничен disposable sender; каждый run имеет отдельную local raw directory, provenance и hash; evidence/comparison.md ссылается на observed ARP и ICMP events и состояние neighbor cache; cleanup/post-check выполнены; network-evidence и review пройдены.",
+          "checks": [
+            "network-evidence",
+            "review"
+          ],
+          "evidence": {
+            "produces": [
+              "evidence/comparison.md",
+              "local ignored raw .training/evidence/01-04/<run-id>/"
+            ],
+            "verifiedBy": [
+              "automated",
+              "empirical",
+              "agent"
+            ]
+          },
+          "requires": [
+            "isolated-lan-lab",
+            "safe-lab-lifecycle",
+            "packet-capture",
+            "ethernet-frame",
+            "mac-address",
+            "ipv4-address",
+            "icmp-echo"
+          ],
+          "introduces": [
+            "arp-neighbor-resolution",
+            "ethernet-broadcast",
+            "neighbor-cache",
+            "cold-warm-path"
+          ],
+          "defers": [
+            "cidr-prefix",
+            "on-link-decision",
+            "switch-forwarding"
+          ]
+        },
+        {
+          "id": "01-05",
+          "releaseStatus": "published",
+          "title": "Локализовать самый ранний недоказанный этап",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся сравнивает три deterministic trace bundles и локализует различие до interface, ARP, Ethernet, IPv4 или ICMP evidence.",
+          "done": "Identity/provenance всех трёх bundles проверены; для каждого case в diagnosis.md названы last proven stage и earliest missing/disproven transition с точной evidence citation; root cause не объявлен известным за границей evidence; сохранены unknowns и следующий различающий observation; network-evidence и agent review пройдены.",
+          "checks": [
+            "network-evidence",
+            "review"
+          ],
+          "evidence": {
+            "produces": [
+              "diagnosis.md"
+            ],
+            "verifiedBy": [
+              "automated",
+              "empirical",
+              "agent"
+            ]
+          },
+          "requires": [
+            "tshark-field-extraction",
+            "frame-map",
+            "arp-neighbor-resolution",
+            "icmp-echo",
+            "epistemic-evidence"
+          ],
+          "introduces": [
+            "packet-path-stage",
+            "negative-evidence-boundary",
+            "diagnostic-localization"
+          ],
+          "defers": [
+            "layered-diagnostic-method"
+          ]
+        },
+        {
+          "id": "01-06",
+          "releaseStatus": "published",
+          "title": "Восстановить полный локальный packet path",
+          "minutes": 55,
+          "kind": "integrate",
+          "outcome": "Учащийся без пошаговой подсказки восстанавливает полный path novel bundle от interface через Ethernet, optional ARP, IPv4 и ICMP до reply.",
+          "done": "Fixture identity/provenance проверены; packet-path.md содержит полный inventory и causal timeline с evidence citation для каждой arrow; epistemic ledger разделяет source facts, assumptions, observations, inferences и meaningful unknowns; вывод ограничен данной LAN/fixture, а конкретный counterfactual мог бы его опровергнуть; network-evidence и review пройдены.",
+          "checks": [
+            "network-evidence",
+            "review"
+          ],
+          "evidence": {
+            "produces": [
+              "packet-path.md"
+            ],
+            "verifiedBy": [
+              "automated",
+              "empirical",
+              "agent"
+            ]
+          },
+          "requires": [
+            "network-interface",
+            "ethernet-frame",
+            "ipv4-datagram",
+            "icmp-echo",
+            "encapsulation",
+            "arp-neighbor-resolution",
+            "neighbor-cache",
+            "diagnostic-localization"
+          ],
+          "introduces": [
+            "lan-packet-walk",
+            "epistemic-network-report"
+          ],
+          "defers": [
+            "cidr-prefix",
+            "on-link-decision",
+            "switch-forwarding",
+            "routing-table"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "slug": "ipv4-cidr-route-choice",
+      "title": "IPv4, CIDR и route choice",
+      "goal": "Вычислять IPv4 prefixes и предсказывать local/next-hop choice до forwarding.",
+      "sessions": [
+        {
+          "id": "02-01",
+          "releaseStatus": "planned",
+          "title": "Разложить IPv4 address на 32 bits",
+          "minutes": 45,
+          "kind": "derive",
+          "outcome": "Учащийся преобразует IPv4 address между dotted decimal и binary и выполняет bitwise AND по octets.",
+          "requires": ["ipv4-address", "integer-arithmetic"],
+          "introduces": ["ipv4-bit-layout", "dotted-decimal", "octet", "bitwise-and"],
+          "defers": ["cidr-prefix"]
+        },
+        {
+          "id": "02-02",
+          "releaseStatus": "planned",
+          "title": "Вычислить network по CIDR prefix",
+          "minutes": 50,
+          "kind": "derive",
+          "outcome": "Учащийся по address/prefix получает subnet mask и разделяет network bits и host bits.",
+          "requires": ["ipv4-address", "ipv4-bit-layout", "dotted-decimal", "bitwise-and"],
+          "introduces": ["cidr-prefix", "subnet-mask", "network-host-bits"],
+          "defers": ["longest-prefix-match"]
+        },
+        {
+          "id": "02-03",
+          "releaseStatus": "planned",
+          "title": "Найти range и capacity subnet",
+          "minutes": 45,
+          "kind": "calculate",
+          "outcome": "Учащийся вычисляет network address, directed broadcast, host range и capacity, включая /31 и /32.",
+          "requires": ["cidr-prefix", "network-host-bits"],
+          "introduces": ["network-address", "directed-broadcast", "host-address-range", "subnet-capacity"],
+          "defers": []
+        },
+        {
+          "id": "02-04",
+          "releaseStatus": "planned",
+          "title": "Разделить address block без overlap",
+          "minutes": 50,
+          "kind": "calculate",
+          "outcome": "Учащийся распределяет non-overlapping VLSM prefixes под заданные capacity requirements.",
+          "requires": ["cidr-prefix", "subnet-capacity", "network-address"],
+          "introduces": ["subnetting", "prefix-selection", "vlsm-address-plan", "overlapping-prefixes"],
+          "defers": []
+        },
+        {
+          "id": "02-05",
+          "releaseStatus": "planned",
+          "title": "Различить scope специальных IPv4 addresses",
+          "minutes": 45,
+          "kind": "observe",
+          "outcome": "Учащийся классифицирует private, loopback, link-local и unspecified addresses и не приписывает им универсальную reachability.",
+          "requires": ["ipv4-address", "cidr-prefix"],
+          "introduces": ["ipv4-address-scope", "private-address-space", "loopback-address", "link-local-address", "unspecified-address"],
+          "defers": ["nat"]
+        },
+        {
+          "id": "02-06",
+          "releaseStatus": "planned",
+          "title": "Выбрать direct delivery или next hop",
+          "minutes": 50,
+          "kind": "derive",
+          "outcome": "Учащийся по local prefix решает, искать destination MAC или MAC default gateway.",
+          "requires": ["cidr-prefix", "network-address", "arp-neighbor-resolution", "ipv4-address"],
+          "introduces": ["on-link-decision", "next-hop", "default-gateway"],
+          "defers": ["routing-table"]
+        },
+        {
+          "id": "02-07",
+          "releaseStatus": "planned",
+          "title": "Предсказать Linux route lookup",
+          "minutes": 50,
+          "kind": "measure",
+          "outcome": "Учащийся предсказывает выбранную route entry и сверяет её с ip route get.",
+          "requires": ["on-link-decision", "next-hop", "cidr-prefix", "overlapping-prefixes"],
+          "introduces": ["routing-table", "route-entry", "route-lookup", "longest-prefix-match", "ip-route-get"],
+          "defers": ["router-forwarding"]
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "slug": "switching-vlan-dhcp",
+      "title": "Switching, VLAN и DHCP",
+      "goal": "Объяснять forwarding внутри broadcast domain, VLAN boundaries и получение host configuration.",
+      "sessions": [
+        {
+          "id": "03-01",
+          "releaseStatus": "planned",
+          "title": "Предсказать Ethernet switch forwarding",
+          "minutes": 45,
+          "kind": "derive",
+          "outcome": "Учащийся по source/destination MAC предсказывает learning, flooding и known-unicast forwarding.",
+          "requires": ["ethernet-frame", "mac-address", "ethernet-broadcast"],
+          "introduces": ["ethernet-unicast", "ethernet-switch", "switch-forwarding", "fdb-learning", "unknown-unicast-flooding", "known-unicast-forwarding"],
+          "defers": []
+        },
+        {
+          "id": "03-02",
+          "releaseStatus": "planned",
+          "title": "Доказать forwarding по port captures",
+          "minutes": 50,
+          "kind": "experiment",
+          "outcome": "Учащийся строит observed port-delivery matrix для cold, learned и aged FDB states.",
+          "requires": ["ethernet-switch", "switch-forwarding", "fdb-learning", "packet-capture"],
+          "introduces": ["mac-table-aging", "switch-forwarding-evidence"],
+          "defers": []
+        },
+        {
+          "id": "03-03",
+          "releaseStatus": "planned",
+          "title": "Разделить LAN с VLAN",
+          "minutes": 50,
+          "kind": "configure",
+          "outcome": "Учащийся объясняет access/trunk forwarding и читает 802.1Q tag в bounded trace.",
+          "requires": ["switch-forwarding", "ethertype", "lan-packet-walk"],
+          "introduces": ["vlan", "vlan-id", "access-port", "trunk-port", "ieee-8021q-tag"],
+          "defers": ["router-forwarding"]
+        },
+        {
+          "id": "03-04",
+          "releaseStatus": "planned",
+          "title": "Локализовать VLAN mismatch",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся различает access VLAN, native VLAN и allowed VLAN faults по topology и traces.",
+          "requires": ["vlan", "access-port", "trunk-port", "switch-forwarding-evidence"],
+          "introduces": ["vlan-isolation", "native-vlan", "trunk-allowed-vlan", "vlan-mismatch"],
+          "defers": []
+        },
+        {
+          "id": "03-05",
+          "releaseStatus": "planned",
+          "title": "Проследить DHCP DORA и lease",
+          "minutes": 50,
+          "kind": "observe",
+          "outcome": "Учащийся связывает Discover, Offer, Request и Ack с lease и полученными IPv4 options внутри одной broadcast domain.",
+          "requires": ["ethernet-broadcast", "ipv4-address", "packet-capture", "network-baseline"],
+          "introduces": ["dhcp-dora", "dhcp-lease", "dhcp-option", "dynamic-host-configuration"],
+          "defers": ["udp-datagram", "dns-resolution-path"]
+        },
+        {
+          "id": "03-06",
+          "releaseStatus": "planned",
+          "title": "Локализовать DHCP failure внутри VLAN",
+          "minutes": 55,
+          "kind": "diagnose",
+          "outcome": "Учащийся различает missing broadcast, wrong VLAN, no offer и invalid lease по bounded evidence.",
+          "requires": ["dhcp-dora", "dhcp-lease", "vlan-isolation", "packet-capture"],
+          "introduces": ["dhcp-broadcast-domain", "dhcp-failure-signatures", "dhcp-diagnostic-ladder"],
+          "defers": []
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "slug": "routing-icmp-mtu",
+      "title": "Routing, ICMP и MTU",
+      "goal": "Прослеживать datagram между LAN и диагностировать route, ICMP и packet-size failures.",
+      "sessions": [
+        {
+          "id": "04-01",
+          "releaseStatus": "planned",
+          "title": "Проследить datagram через router",
+          "minutes": 50,
+          "kind": "experiment",
+          "outcome": "Учащийся доказывает, что на каждом hop переписывается Ethernet frame, IPv4 endpoints сохраняются, а TTL уменьшается.",
+          "requires": ["routing-table", "route-lookup", "ethernet-frame", "ipv4-datagram", "switch-forwarding", "next-hop"],
+          "introduces": ["router-forwarding", "ttl-decrement", "per-hop-frame-rewrite"],
+          "defers": ["icmp-error"]
+        },
+        {
+          "id": "04-02",
+          "releaseStatus": "planned",
+          "title": "Добавить static route и доказать return path",
+          "minutes": 50,
+          "kind": "configure",
+          "outcome": "Учащийся добавляет одну reversible static route и подтверждает forward и return path.",
+          "requires": ["router-forwarding", "route-entry", "ip-route-get"],
+          "introduces": ["static-route", "return-path", "asymmetric-path"],
+          "defers": ["stateful-firewall"]
+        },
+        {
+          "id": "04-03",
+          "releaseStatus": "planned",
+          "title": "Прочитать ICMP errors",
+          "minutes": 45,
+          "kind": "diagnose",
+          "outcome": "Учащийся различает destination unreachable и time exceeded и связывает error с original datagram.",
+          "requires": ["icmp-echo", "router-forwarding", "ttl-decrement", "return-path"],
+          "introduces": ["icmp-error", "icmp-destination-unreachable", "icmp-time-exceeded"],
+          "defers": ["traceroute-principle", "path-mtu-discovery"]
+        },
+        {
+          "id": "04-04",
+          "releaseStatus": "planned",
+          "title": "Восстановить multi-hop path с traceroute",
+          "minutes": 45,
+          "kind": "observe",
+          "outcome": "Учащийся объясняет traceroute как controlled TTL experiment и ограничивает вывод наблюдаемыми hops.",
+          "requires": ["icmp-time-exceeded", "ttl-decrement", "packet-capture"],
+          "introduces": ["traceroute-principle", "multi-hop-path", "hop-observation"],
+          "defers": []
+        },
+        {
+          "id": "04-05",
+          "releaseStatus": "planned",
+          "title": "Различить MTU и IPv4 fragmentation",
+          "minutes": 50,
+          "kind": "experiment",
+          "outcome": "Учащийся предсказывает fragmentation по datagram size, interface MTU и DF bit и сверяет с trace.",
+          "requires": ["ipv4-datagram", "ipv4-header", "integer-arithmetic"],
+          "introduces": ["mtu", "interface-mtu", "ipv4-fragmentation", "df-bit"],
+          "defers": ["path-mtu-discovery"]
+        },
+        {
+          "id": "04-06",
+          "releaseStatus": "planned",
+          "title": "Диагностировать PMTUD blackhole",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся связывает DF, ICMP fragmentation needed и silent drop с Path MTU Discovery.",
+          "requires": ["mtu", "df-bit", "icmp-error", "multi-hop-path"],
+          "introduces": ["path-mtu-discovery", "icmp-fragmentation-needed", "pmtud-blackhole"],
+          "defers": ["tcp-mss"]
+        },
+        {
+          "id": "04-07",
+          "releaseStatus": "planned",
+          "title": "Локализовать route или MTU failure",
+          "minutes": 55,
+          "kind": "diagnose",
+          "outcome": "Учащийся различает missing route, return-path fault, loop, blackhole и PMTUD failure минимальными observations.",
+          "requires": ["route-lookup", "static-route", "return-path", "icmp-error", "traceroute-principle", "pmtud-blackhole"],
+          "introduces": ["routing-blackhole", "routing-loop", "routing-mtu-diagnostic-ladder"],
+          "defers": ["stateful-firewall"]
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "slug": "udp-tcp",
+      "title": "UDP и TCP",
+      "goal": "Связать process endpoints с transport behavior и узнаваемыми failure signatures.",
+      "sessions": [
+        {
+          "id": "05-01",
+          "releaseStatus": "planned",
+          "title": "Связать process, IP, port и socket",
+          "minutes": 45,
+          "kind": "observe",
+          "outcome": "Учащийся сопоставляет process с local/remote socket endpoints и five-tuple.",
+          "requires": ["process-basics", "ipv4-address", "network-interface"],
+          "introduces": ["transport-port", "socket", "socket-endpoint", "five-tuple"],
+          "defers": ["udp-datagram", "tcp-segment"]
+        },
+        {
+          "id": "05-02",
+          "releaseStatus": "planned",
+          "title": "Наблюдать UDP delivery и message boundaries",
+          "minutes": 45,
+          "kind": "experiment",
+          "outcome": "Учащийся отправляет bounded UDP messages и различает delivery, loss, duplication и reordering без обещания reliability.",
+          "requires": ["socket-endpoint", "five-tuple", "packet-capture", "dhcp-dora"],
+          "introduces": ["udp-datagram", "udp-header", "message-boundary", "connectionless-delivery", "best-effort-delivery", "packet-loss", "packet-duplication", "packet-reordering"],
+          "defers": ["retry-policy"]
+        },
+        {
+          "id": "05-03",
+          "releaseStatus": "planned",
+          "title": "Локализовать UDP bind failure",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся различает no process, loopback bind, wildcard bind, missing request и missing reply по ss и capture.",
+          "requires": ["udp-datagram", "socket", "loopback-address", "routing-mtu-diagnostic-ladder"],
+          "introduces": ["socket-bind", "wildcard-bind", "listen-reachability", "ss-inspection", "udp-diagnostic-ladder"],
+          "defers": ["docker-port-publish"]
+        },
+        {
+          "id": "05-04",
+          "releaseStatus": "planned",
+          "title": "Восстановить TCP handshake и state",
+          "minutes": 50,
+          "kind": "observe",
+          "outcome": "Учащийся по SYN, SYN-ACK и ACK trace восстанавливает state transitions и начальный sequence space.",
+          "requires": ["socket-endpoint", "five-tuple", "packet-capture"],
+          "introduces": ["tcp-segment", "tcp-handshake", "tcp-state-machine", "sequence-number"],
+          "defers": ["tcp-byte-stream", "stateful-firewall"]
+        },
+        {
+          "id": "05-05",
+          "releaseStatus": "planned",
+          "title": "Доказать reliable byte stream",
+          "minutes": 50,
+          "kind": "experiment",
+          "outcome": "Учащийся связывает ACK, retransmission, ordering и MSS с TCP byte stream и контрастирует его с UDP boundaries.",
+          "requires": ["tcp-segment", "tcp-handshake", "sequence-number", "message-boundary", "path-mtu-discovery"],
+          "introduces": ["tcp-byte-stream", "acknowledgement", "retransmission", "ordered-delivery", "tcp-mss"],
+          "defers": ["congestion-control"]
+        },
+        {
+          "id": "05-06",
+          "releaseStatus": "planned",
+          "title": "Различить flow control и congestion control",
+          "minutes": 50,
+          "kind": "derive",
+          "outcome": "Учащийся объясняет разные ограничения receive window и congestion window на sender flight size.",
+          "requires": ["tcp-byte-stream", "acknowledgement", "retransmission", "integer-arithmetic"],
+          "introduces": ["flow-control", "receive-window", "congestion-control", "congestion-window"],
+          "defers": ["bandwidth-delay-product"]
+        },
+        {
+          "id": "05-07",
+          "releaseStatus": "planned",
+          "title": "Различить FIN, RST, half-close и TIME_WAIT",
+          "minutes": 45,
+          "kind": "observe",
+          "outcome": "Учащийся по close scenarios определяет graceful close, half-close, reset и TIME_WAIT owner.",
+          "requires": ["tcp-state-machine", "sequence-number", "acknowledgement"],
+          "introduces": ["tcp-fin", "tcp-rst", "half-close", "time-wait"],
+          "defers": []
+        },
+        {
+          "id": "05-08",
+          "releaseStatus": "planned",
+          "title": "Локализовать TCP service failure",
+          "minutes": 55,
+          "kind": "diagnose",
+          "outcome": "Учащийся различает refused, connect timeout, reset, retransmission stall и backlog saturation по ss и captures.",
+          "requires": ["tcp-handshake", "tcp-rst", "retransmission", "socket-bind", "ss-inspection", "routing-mtu-diagnostic-ladder"],
+          "introduces": ["listen-socket", "syn-queue", "accept-queue", "connection-backlog", "connect-timeout", "idle-timeout", "tcp-failure-signatures", "tcp-diagnostic-ladder"],
+          "defers": ["health-check"]
+        }
+      ]
+    },
+    {
+      "id": "06",
+      "slug": "dns",
+      "title": "DNS",
+      "goal": "Проследить name resolution от application API до authoritative answer и отличать failure states.",
+      "sessions": [
+        {
+          "id": "06-01",
+          "releaseStatus": "planned",
+          "title": "Проследить resolver chain",
+          "minutes": 45,
+          "kind": "observe",
+          "outcome": "Учащийся связывает application call, stub resolver, recursive resolver и authoritative server в один DNS path.",
+          "requires": ["udp-datagram", "tcp-byte-stream", "socket-endpoint", "dynamic-host-configuration"],
+          "introduces": ["dns-name", "dns-record", "stub-resolver", "recursive-resolver", "authoritative-server", "dns-resolution-path"],
+          "defers": ["dns-cache"]
+        },
+        {
+          "id": "06-02",
+          "releaseStatus": "planned",
+          "title": "Наблюдать A, CNAME, TTL и cache",
+          "minutes": 50,
+          "kind": "experiment",
+          "outcome": "Учащийся доказывает cache hit/expiry и прослеживает CNAME chain до A record.",
+          "requires": ["dns-record", "dns-resolution-path"],
+          "introduces": ["dns-a-record", "dns-cname", "dns-ttl", "dns-cache"],
+          "defers": ["negative-cache"]
+        },
+        {
+          "id": "06-03",
+          "releaseStatus": "planned",
+          "title": "Различить DNS over UDP и TCP",
+          "minutes": 45,
+          "kind": "observe",
+          "outcome": "Учащийся по traces объясняет normal UDP query и TCP fallback после truncated response.",
+          "requires": ["dns-resolution-path", "udp-datagram", "tcp-byte-stream", "packet-capture"],
+          "introduces": ["dns-message", "dns-transport-fallback", "dns-truncation"],
+          "defers": []
+        },
+        {
+          "id": "06-04",
+          "releaseStatus": "planned",
+          "title": "Предсказать system name resolution",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся предсказывает getaddrinfo result с учётом nsswitch, hosts, search domain и ndots.",
+          "requires": ["dns-name", "stub-resolver", "ipv4-address-scope", "text-files"],
+          "introduces": ["getaddrinfo", "nsswitch", "hosts-file", "search-domain", "ndots"],
+          "defers": ["docker-embedded-dns"]
+        },
+        {
+          "id": "06-05",
+          "releaseStatus": "planned",
+          "title": "Различить NXDOMAIN, SERVFAIL и timeout",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся классифицирует negative/no-answer states и доказывает влияние negative cache.",
+          "requires": ["dns-resolution-path", "dns-cache", "dns-message"],
+          "introduces": ["nxdomain", "servfail", "dns-timeout", "negative-cache"],
+          "defers": []
+        },
+        {
+          "id": "06-06",
+          "releaseStatus": "planned",
+          "title": "Локализовать DNS failure",
+          "minutes": 55,
+          "kind": "diagnose",
+          "outcome": "Учащийся различает application lookup, local resolver, recursive failure и authoritative answer через getent, dig и capture.",
+          "requires": ["dns-resolution-path", "dns-a-record", "getaddrinfo", "nxdomain", "servfail", "dns-timeout", "packet-capture"],
+          "introduces": ["dns-diagnostic-ladder", "resolver-observability"],
+          "defers": ["docker-embedded-dns"]
+        }
+      ]
+    },
+    {
+      "id": "07",
+      "slug": "nat-firewall",
+      "title": "NAT и firewall",
+      "goal": "Проследить Linux packet path, stateful filtering и address translation одного flow.",
+      "sessions": [
+        {
+          "id": "07-01",
+          "releaseStatus": "planned",
+          "title": "Различить Linux input, output и forward path",
+          "minutes": 45,
+          "kind": "derive",
+          "outcome": "Учащийся классифицирует packet path по origin, destination и local socket ownership.",
+          "requires": ["isolated-lan-lab", "network-interface", "routing-table", "socket-bind"],
+          "introduces": ["linux-packet-path", "local-input-path", "local-output-path", "forward-path"],
+          "defers": ["stateful-firewall", "nat"]
+        },
+        {
+          "id": "07-02",
+          "releaseStatus": "planned",
+          "title": "Доказать stateful firewall через conntrack",
+          "minutes": 50,
+          "kind": "experiment",
+          "outcome": "Учащийся связывает firewall rule order и conntrack state с разрешённым и отклонённым flow.",
+          "requires": ["linux-packet-path", "tcp-state-machine", "udp-datagram"],
+          "introduces": ["stateful-firewall", "conntrack-state", "firewall-rule-order"],
+          "defers": ["nat"]
+        },
+        {
+          "id": "07-03",
+          "releaseStatus": "planned",
+          "title": "Собрать bounded default-deny policy",
+          "minutes": 50,
+          "kind": "configure",
+          "outcome": "Учащийся разрешает один exact flow, блокирует соседний и доказывает rule order counters до rollback.",
+          "requires": ["stateful-firewall", "firewall-rule-order", "five-tuple"],
+          "introduces": ["firewall-policy", "default-deny", "rule-counter-evidence"],
+          "defers": []
+        },
+        {
+          "id": "07-04",
+          "releaseStatus": "planned",
+          "title": "Проследить DNAT и port forwarding",
+          "minutes": 50,
+          "kind": "experiment",
+          "outcome": "Учащийся восстанавливает original и translated destination tuple в обеих directions.",
+          "requires": ["stateful-firewall", "conntrack-state", "private-address-space", "forward-path"],
+          "introduces": ["nat", "dnat", "nat-mapping", "port-forwarding"],
+          "defers": ["docker-port-publish"]
+        },
+        {
+          "id": "07-05",
+          "releaseStatus": "planned",
+          "title": "Проследить SNAT и masquerade",
+          "minutes": 50,
+          "kind": "experiment",
+          "outcome": "Учащийся доказывает source rewrite и связывает return traffic с conntrack mapping.",
+          "requires": ["nat", "nat-mapping", "return-path", "ipv4-address-scope"],
+          "introduces": ["snat", "masquerade", "source-address-rewrite"],
+          "defers": []
+        },
+        {
+          "id": "07-06",
+          "releaseStatus": "planned",
+          "title": "Разобрать NAT return и hairpin path",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся связывает bidirectional conntrack entry с return translation и hairpin failure.",
+          "requires": ["dnat", "snat", "nat-mapping", "conntrack-state"],
+          "introduces": ["hairpin-nat", "nat-return-path", "conntrack-evidence"],
+          "defers": []
+        },
+        {
+          "id": "07-07",
+          "releaseStatus": "planned",
+          "title": "Локализовать firewall или NAT fault",
+          "minutes": 55,
+          "kind": "diagnose",
+          "outcome": "Учащийся различает wrong path, rule order, missing state и wrong translation по counters, conntrack и capture.",
+          "requires": ["stateful-firewall", "nat", "port-forwarding", "tcp-diagnostic-ladder", "udp-diagnostic-ladder", "conntrack-evidence"],
+          "introduces": ["firewall-nat-diagnostic-ladder"],
+          "defers": ["docker-port-publish"]
+        }
+      ]
+    },
+    {
+      "id": "08",
+      "slug": "http-tls-proxy",
+      "title": "HTTP, TLS и proxy",
+      "goal": "Разложить HTTPS path и объяснять proxy routing, trust и backend health.",
+      "sessions": [
+        {
+          "id": "08-01",
+          "releaseStatus": "planned",
+          "title": "Увидеть HTTP request и response поверх TCP",
+          "minutes": 45,
+          "kind": "observe",
+          "outcome": "Учащийся выделяет request/response messages в TCP stream и объясняет persistent connection.",
+          "requires": ["tcp-byte-stream", "socket-endpoint", "dns-name"],
+          "introduces": ["http-request", "http-response", "http-message", "http-persistent-connection"],
+          "defers": ["http-message-framing", "tls-handshake"]
+        },
+        {
+          "id": "08-02",
+          "releaseStatus": "planned",
+          "title": "Связать URL, Host и virtual hosting",
+          "minutes": 45,
+          "kind": "experiment",
+          "outcome": "Учащийся доказывает, почему один destination IP может обслуживать разные HTTP hosts.",
+          "requires": ["http-request", "dns-name", "dns-a-record"],
+          "introduces": ["url-authority", "http-host-header", "virtual-hosting"],
+          "defers": ["server-name-indication"]
+        },
+        {
+          "id": "08-03",
+          "releaseStatus": "planned",
+          "title": "Диагностировать HTTP message framing",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся различает Content-Length, chunked transfer и premature TCP close.",
+          "requires": ["http-message", "tcp-byte-stream", "message-boundary"],
+          "introduces": ["http-message-framing", "content-length", "chunked-transfer-encoding"],
+          "defers": ["layer7-proxy"]
+        },
+        {
+          "id": "08-04",
+          "releaseStatus": "planned",
+          "title": "Проследить TLS handshake",
+          "minutes": 50,
+          "kind": "observe",
+          "outcome": "Учащийся связывает certificate chain, SNI и ALPN с одним TLS handshake.",
+          "requires": ["tcp-handshake", "dns-name", "http-host-header"],
+          "introduces": ["tls-handshake", "certificate-chain", "server-name-indication", "alpn"],
+          "defers": ["hostname-verification", "reverse-proxy"]
+        },
+        {
+          "id": "08-05",
+          "releaseStatus": "planned",
+          "title": "Проверить TLS identity и trust",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся через openssl и curl различает hostname mismatch, validity, incomplete chain и untrusted issuer.",
+          "requires": ["tls-handshake", "certificate-chain", "server-name-indication", "tcp-diagnostic-ladder", "dns-diagnostic-ladder"],
+          "introduces": ["hostname-verification", "trust-store", "certificate-validity", "tls-failure-signatures", "curl-layered-probe", "curl-phase-timing"],
+          "defers": ["reverse-proxy"]
+        },
+        {
+          "id": "08-06",
+          "releaseStatus": "planned",
+          "title": "Различить forward, reverse, L4 и L7 proxy",
+          "minutes": 50,
+          "kind": "compare",
+          "outcome": "Учащийся по scenarios определяет connection ownership, доступные routing decisions и место TLS termination.",
+          "requires": ["http-message", "tls-handshake", "port-forwarding", "socket-bind"],
+          "introduces": ["forward-proxy", "reverse-proxy", "layer4-proxy", "layer7-proxy", "tls-termination"],
+          "defers": ["load-balancing", "trust-boundary"]
+        },
+        {
+          "id": "08-07",
+          "releaseStatus": "planned",
+          "title": "Проверить proxy routing, health и client identity",
+          "minutes": 55,
+          "kind": "experiment",
+          "outcome": "Учащийся наблюдает backend selection, readiness state и source identity через trusted proxy boundary.",
+          "requires": ["reverse-proxy", "layer7-proxy", "tls-termination", "http-request", "tcp-failure-signatures"],
+          "introduces": ["load-balancing", "health-check", "readiness", "source-ip-propagation", "forwarded-header", "trust-boundary"],
+          "defers": []
+        }
+      ]
+    },
+    {
+      "id": "09",
+      "slug": "docker-networking",
+      "title": "Docker networking",
+      "goal": "Перенести Linux model на Compose service discovery, network isolation и published ports.",
+      "sessions": [
+        {
+          "id": "09-01",
+          "releaseStatus": "planned",
+          "title": "Проследить container path через namespace, veth и bridge",
+          "minutes": 50,
+          "kind": "observe",
+          "outcome": "Учащийся связывает container network namespace, veth endpoints и Docker bridge для одного internal flow.",
+          "requires": ["docker-basics", "docker-compose-basics", "ethernet-switch", "linux-packet-path"],
+          "introduces": ["network-namespace", "veth-pair", "docker-bridge-network", "container-network-namespace", "docker-veth-path"],
+          "defers": ["docker-embedded-dns", "docker-port-publish"]
+        },
+        {
+          "id": "09-02",
+          "releaseStatus": "planned",
+          "title": "Доказать Compose service discovery",
+          "minutes": 45,
+          "kind": "experiment",
+          "outcome": "Учащийся связывает service name с Docker embedded DNS answer и container resolver configuration.",
+          "requires": ["docker-bridge-network", "dns-resolution-path", "getaddrinfo", "search-domain"],
+          "introduces": ["docker-embedded-dns", "compose-service-discovery", "container-dns-config"],
+          "defers": []
+        },
+        {
+          "id": "09-03",
+          "releaseStatus": "planned",
+          "title": "Различить EXPOSE, publish и bind",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся локализует недоступность до metadata, process bind или host-to-container translation.",
+          "requires": ["docker-bridge-network", "socket-bind", "port-forwarding", "nat"],
+          "introduces": ["docker-expose-metadata", "docker-port-publish", "host-container-bind-boundary"],
+          "defers": ["docker-host-boundary"]
+        },
+        {
+          "id": "09-04",
+          "releaseStatus": "planned",
+          "title": "Спроектировать user-defined network isolation",
+          "minutes": 50,
+          "kind": "design",
+          "outcome": "Учащийся размещает services в минимальном наборе Compose networks и доказывает нужные и запрещённые paths.",
+          "requires": ["docker-bridge-network", "compose-service-discovery", "vlsm-address-plan", "trust-boundary"],
+          "introduces": ["docker-network-isolation", "multi-network-service", "least-connectivity"],
+          "defers": []
+        },
+        {
+          "id": "09-05",
+          "releaseStatus": "planned",
+          "title": "Различить host-container path на Linux и Docker Desktop",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся выбирает portable path для container-to-host и host-to-container без предположения host networking.",
+          "requires": ["docker-port-publish", "host-container-bind-boundary", "ipv4-address-scope"],
+          "introduces": ["docker-host-boundary", "host-gateway-name", "docker-desktop-vm-boundary"],
+          "defers": []
+        },
+        {
+          "id": "09-06",
+          "releaseStatus": "planned",
+          "title": "Локализовать Compose connectivity fault",
+          "minutes": 55,
+          "kind": "diagnose",
+          "outcome": "Учащийся различает DNS, network membership, bind, publish, firewall и application failure.",
+          "requires": ["docker-embedded-dns", "docker-port-publish", "docker-network-isolation", "docker-host-boundary", "tcp-diagnostic-ladder", "firewall-nat-diagnostic-ladder"],
+          "introduces": ["docker-network-diagnostic-ladder", "container-path-evidence"],
+          "defers": ["layered-diagnostic-method"]
+        }
+      ]
+    },
+    {
+      "id": "10",
+      "slug": "diagnostics-performance",
+      "title": "Diagnosis и performance",
+      "goal": "Выбирать minimum discriminating test и количественно объяснять latency, throughput, loss, queues и retries.",
+      "sessions": [
+        {
+          "id": "10-01",
+          "releaseStatus": "planned",
+          "title": "Построить layered diagnostic decision tree",
+          "minutes": 50,
+          "kind": "diagnose",
+          "outcome": "Учащийся выбирает minimum discriminating test между link, DHCP, routing, transport, DNS, firewall/NAT, TLS, proxy и Docker hypotheses.",
+          "requires": ["diagnostic-localization", "dhcp-diagnostic-ladder", "routing-mtu-diagnostic-ladder", "udp-diagnostic-ladder", "tcp-diagnostic-ladder", "dns-diagnostic-ladder", "firewall-nat-diagnostic-ladder", "tls-failure-signatures", "docker-network-diagnostic-ladder"],
+          "introduces": ["layered-diagnostic-method", "minimum-discriminating-test", "evidence-timeline", "network-observability", "correlation-id"],
+          "defers": []
+        },
+        {
+          "id": "10-02",
+          "releaseStatus": "planned",
+          "title": "Собрать latency budget и измерить RTT",
+          "minutes": 45,
+          "kind": "measure",
+          "outcome": "Учащийся разделяет RTT и end-to-end latency и строит additive budget для request path.",
+          "requires": ["curl-layered-probe", "curl-phase-timing", "integer-arithmetic", "epistemic-evidence"],
+          "introduces": ["latency", "rtt", "latency-budget", "critical-path"],
+          "defers": ["tail-latency"]
+        },
+        {
+          "id": "10-03",
+          "releaseStatus": "planned",
+          "title": "Различить bandwidth, throughput и goodput",
+          "minutes": 50,
+          "kind": "measure",
+          "outcome": "Учащийся измеряет throughput/goodput и вычисляет bandwidth-delay product с units и sanity check.",
+          "requires": ["latency", "rtt", "integer-arithmetic", "tcp-byte-stream"],
+          "introduces": ["bandwidth", "throughput", "goodput", "bandwidth-delay-product"],
+          "defers": ["queueing-delay"]
+        },
+        {
+          "id": "10-04",
+          "releaseStatus": "planned",
+          "title": "Связать loss, retransmission и tail latency",
+          "minutes": 50,
+          "kind": "experiment",
+          "outcome": "Учащийся по repeated runs показывает, почему одинаковый average скрывает retransmission-driven tail.",
+          "requires": ["packet-loss", "retransmission", "rtt", "curl-phase-timing"],
+          "introduces": ["tail-latency", "retransmission-cost", "latency-distribution", "percentile"],
+          "defers": ["retry-policy"]
+        },
+        {
+          "id": "10-05",
+          "releaseStatus": "planned",
+          "title": "Наблюдать queueing и backpressure",
+          "minutes": 50,
+          "kind": "experiment",
+          "outcome": "Учащийся связывает offered load, queue growth, bufferbloat и application backpressure.",
+          "requires": ["bandwidth-delay-product", "latency", "flow-control"],
+          "introduces": ["queueing-delay", "bufferbloat", "backpressure"],
+          "defers": ["timeout-budget"]
+        },
+        {
+          "id": "10-06",
+          "releaseStatus": "planned",
+          "title": "Спроектировать timeout и retry budget",
+          "minutes": 55,
+          "kind": "design",
+          "outcome": "Учащийся задаёт bounded timeout/retry policy с exponential backoff, jitter и idempotency boundary без retry storm.",
+          "requires": ["connect-timeout", "idle-timeout", "latency-budget", "tail-latency", "best-effort-delivery", "backpressure"],
+          "introduces": ["timeout-budget", "retry-policy", "exponential-backoff", "jitter", "retry-storm", "idempotency-boundary"],
           "defers": []
         }
       ]
@@ -45,8 +1031,64 @@
   ],
   "capstone": {
     "id": "capstone",
-    "title": "Итоговый проект",
-    "goal": "Опишите проект, который объединяет освоенные результаты.",
-    "sessions": []
+    "title": "От symptom к доказанному recovery",
+    "goal": "Собрать observable Docker production path, локализовать deterministic fault, восстановить service и оставить воспроизводимый runbook.",
+    "sessions": [
+      {
+        "id": "cap-01",
+        "releaseStatus": "planned",
+        "title": "Собрать observable production path",
+        "minutes": 55,
+        "kind": "build",
+        "outcome": "Учащийся собирает client → reverse proxy/load balancer → two backends topology с isolation и acceptance probe.",
+        "requires": ["docker-network-isolation", "compose-service-discovery", "reverse-proxy", "load-balancing", "health-check", "network-observability", "least-connectivity"],
+        "introduces": ["capstone-topology", "acceptance-probe"],
+        "defers": ["fault-injection"]
+      },
+      {
+        "id": "cap-02",
+        "releaseStatus": "planned",
+        "title": "Зафиксировать production baseline и evidence map",
+        "minutes": 55,
+        "kind": "measure",
+        "outcome": "Учащийся доказывает healthy baseline и связывает probes, logs, metrics и packet evidence с каждым hop.",
+        "requires": ["capstone-topology", "acceptance-probe", "correlation-id", "evidence-timeline", "container-path-evidence"],
+        "introduces": ["production-baseline", "service-level-signal", "capstone-evidence-map"],
+        "defers": ["fault-injection"]
+      },
+      {
+        "id": "cap-03",
+        "releaseStatus": "planned",
+        "title": "Инжектировать fault и вести hypothesis log",
+        "minutes": 55,
+        "kind": "experiment",
+        "outcome": "Учащийся активирует один разрешённый deterministic fault и фиксирует competing hypotheses до проверок.",
+        "requires": ["production-baseline", "layered-diagnostic-method", "minimum-discriminating-test", "safe-lab-lifecycle"],
+        "introduces": ["fault-injection", "incident-hypothesis-log", "incident-timeline", "rollback-decision"],
+        "defers": ["recovery-verification", "runbook"]
+      },
+      {
+        "id": "cap-04",
+        "releaseStatus": "planned",
+        "title": "Локализовать fault и доказать recovery",
+        "minutes": 55,
+        "kind": "diagnose",
+        "outcome": "Учащийся ограничивает blast radius, выполняет reversible recovery и подтверждает root cause counterfactual check.",
+        "requires": ["fault-injection", "incident-hypothesis-log", "incident-timeline", "capstone-evidence-map", "rollback-decision"],
+        "introduces": ["blast-radius", "counterfactual-check", "recovery-verification"],
+        "defers": ["runbook"]
+      },
+      {
+        "id": "cap-05",
+        "releaseStatus": "planned",
+        "title": "Выпустить runbook и закрыть incident",
+        "minutes": 55,
+        "kind": "ship",
+        "outcome": "Учащийся повторяет acceptance probes, подтверждает cleanup и выпускает evidence-linked runbook с ограниченным post-incident inference.",
+        "requires": ["recovery-verification", "counterfactual-check", "production-baseline", "acceptance-probe", "incident-timeline"],
+        "introduces": ["runbook", "post-incident-inference"],
+        "defers": []
+      }
+    ]
   }
 }

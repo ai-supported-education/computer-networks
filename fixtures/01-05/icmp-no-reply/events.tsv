@@ -1,0 +1,4 @@
+frame	elapsed_ms	protocol	observation
+1	0.0	ARP	request who-has 172.30.0.20 tell 172.30.0.10
+2	0.3	ARP	reply 172.30.0.20 is-at 02:42:ac:1e:00:14
+3	0.9	ICMP	Echo Request 172.30.0.10 -> 172.30.0.20 id=20741 seq=1

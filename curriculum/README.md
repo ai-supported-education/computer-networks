@@ -4,9 +4,11 @@
 profiles, checks и evidence. Здесь можно держать человеческий обзор маршрута, но не
 вторую независимую версию требований.
 
-В шаблоне есть один демонстрационный module `01-replace-me`. Замените его своим
-первым разделом до публикации курса. Новые modules добавляйте в manifest и создавайте
-одноимённую папку `modules/<id>-<slug>/sessions/<session-id>/`.
+Опубликованная часть курса начинается с module `01-one-packet-one-lan`; остальные
+карточки пока образуют roadmap со статусом `planned`. При реализации следующей
+карточки сначала обновите её полный контракт в authoring branch, создайте
+одноимённую папку `modules/<id>-<slug>/sessions/<session-id>/`, проведите session и
+module content-review, и только затем переносите published prefix в default branch.
 
 Перед добавлением карточки сверяйтесь с [контрактом сессии](session-contract.md) и
 [стандартом материала](authoring-standard.md), выберите profiles по

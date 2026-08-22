@@ -1,0 +1,8 @@
+{
+  "questions": [
+    { "id": "q1", "requiresReason": true },
+    { "id": "q2", "requiresReason": true },
+    { "id": "q3", "requiresReason": true },
+    { "id": "q4", "requiresReason": true }
+  ]
+}

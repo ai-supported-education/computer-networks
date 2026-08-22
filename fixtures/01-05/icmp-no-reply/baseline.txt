@@ -1,0 +1,5 @@
+capture_point=alpha:eth0
+eth0 state UP LOWER_UP
+mac=02:42:ac:1e:00:0a
+ipv4=172.30.0.10
+neighbor_172.30.0.20=absent

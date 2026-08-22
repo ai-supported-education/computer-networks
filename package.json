@@ -1,5 +1,5 @@
 {
-  "name": "ai-supported-course-template",
+  "name": "@ai-supported-education/computer-networks",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,8 +18,10 @@
     "session:dev": "node --import tsx packages/session-runner/src/cli.ts dev",
     "course:sync": "node --import tsx packages/session-runner/src/course-sync-cli.ts",
     "author:content-review": "node --import tsx packages/session-runner/src/content-review-cli.ts",
-    "typecheck": "pnpm --filter @training/session-runner typecheck",
-    "test": "pnpm --filter @training/session-runner test"
+    "network:lab": "node --import tsx packages/network-lab/src/cli.ts",
+    "network:fixture": "node --import tsx packages/network-lab/src/fixture-cli.ts",
+    "typecheck": "pnpm --filter @training/network-lab typecheck && pnpm --filter @training/session-runner typecheck",
+    "test": "pnpm --filter @training/network-lab test && pnpm --filter @training/session-runner test"
   },
   "devDependencies": {
     "@types/node": "26.2.0",

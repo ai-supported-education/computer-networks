@@ -1,0 +1,7 @@
+requested_at=2024-01-01T00:10:00.000Z
+action=one IPv4 ICMP Echo probe requested
+source=172.30.0.10
+target=172.30.0.20
+capture_point=alpha:eth0
+window_ms=2000
+frame_limit=8
