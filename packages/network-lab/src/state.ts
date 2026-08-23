@@ -60,7 +60,7 @@ export async function reserveState(
   dockerEndpoint: DockerEndpointInventory
 ): Promise<LabState> {
   const stateFile = getStateFile(root);
-  const existing = await lstat(stateFile).catch(() => null);
+  const existing = await lstatIfPresent(stateFile);
   if (existing) {
     throw new Error(
       "Уже есть active lab state. Выполните network:lab status/down."
@@ -110,7 +110,7 @@ export async function reserveState(
 
 export async function readState(root: string): Promise<LabState> {
   const stateFile = getStateFile(root);
-  const metadata = await lstat(stateFile).catch(() => null);
+  const metadata = await lstatIfPresent(stateFile);
   if (!metadata || !metadata.isFile() || metadata.isSymbolicLink()) {
     throw new Error("Active lab state не найден.");
   }
@@ -122,8 +122,25 @@ export async function readState(root: string): Promise<LabState> {
 export async function readStateIfPresent(
   root: string
 ): Promise<LabState | null> {
-  const exists = await lstat(getStateFile(root)).catch(() => null);
+  const exists = await lstatIfPresent(getStateFile(root));
   return exists ? readState(root) : null;
+}
+
+export function isMissingFileError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
+}
+
+async function lstatIfPresent(target: string) {
+  try {
+    return await lstat(target);
+  } catch (error) {
+    if (isMissingFileError(error)) return null;
+    throw error;
+  }
 }
 
 export async function saveState(root: string, state: LabState): Promise<void> {

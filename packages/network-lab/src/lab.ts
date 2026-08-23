@@ -83,6 +83,7 @@ interface DockerContainerInspect {
   Name: string;
   Config: {
     Image?: string;
+    Cmd?: string[];
     Labels?: Record<string, string>;
   };
   State: { Running?: boolean; ExitCode?: number };
@@ -91,10 +92,20 @@ interface DockerContainerInspect {
     ReadonlyRootfs?: boolean;
     CapAdd?: string[] | null;
     CapDrop?: string[] | null;
+    SecurityOpt?: string[] | null;
+    Tmpfs?: Record<string, string> | null;
+    PidsLimit?: number | null;
+    Memory?: number;
+    NanoCpus?: number;
     NetworkMode?: string;
     PortBindings?: Record<string, unknown> | null;
   };
-  Mounts?: unknown[];
+  Mounts?: Array<{
+    Type?: string;
+    Name?: string;
+    Destination?: string;
+    RW?: boolean;
+  }>;
   NetworkSettings?: {
     Ports?: Record<string, unknown> | null;
     Networks?: Record<
@@ -103,6 +114,19 @@ interface DockerContainerInspect {
     >;
   };
 }
+
+interface HelperVolumeMount {
+  source: string;
+  target: string;
+}
+
+const LIVE_TMPFS_OPTIONS = [
+  "rw",
+  "noexec",
+  "nosuid",
+  "nodev",
+  "size=16m"
+] as const;
 
 const BETA_ARP_OR_ICMP_FILTER =
   `(arp and (arp[14:4] = 0xac1e0014 or arp[24:4] = 0xac1e0014)) ` +
@@ -174,15 +198,21 @@ export async function preflightLab(root: string): Promise<PreflightResult> {
       "Rootless Docker не входит в проверенную matrix isolated lab v1."
     );
   }
-  const image = await runCommand(
+  const image = await tryCommand(
     "docker",
     ["image", "inspect", LAB_IMAGE, "--format", "{{.Id}}"],
     { timeoutMs: 10_000 }
-  ).catch(() => {
+  );
+  if (image.exitCode !== 0) {
+    if (isNoSuchDockerObject(image, "image")) {
+      throw new Error(
+        "Pinned image не загружен. Выполните pnpm network:lab preload."
+      );
+    }
     throw new Error(
-      "Pinned image не загружен. Выполните pnpm network:lab preload."
+      `Pinned image нельзя безопасно проверить: ${image.stderr || image.stdout || "Docker не вернул причину"}`
     );
-  });
+  }
   const imageId = image.stdout.trim();
   if (!/^sha256:[a-f0-9]{64}$/.test(imageId)) {
     throw new Error(`Неожиданный local image ID: ${imageId}`);
@@ -1064,7 +1094,7 @@ async function capturePhase(
     root,
     state,
     `capture-${phase}`,
-    ["NET_ADMIN", "NET_RAW"],
+    ["NET_RAW"],
     [
       "sh",
       "-c",
@@ -1089,9 +1119,7 @@ async function capturePhase(
       CAPTURE_CONTAINER_PATH
     ],
     `container:${alphaId}`,
-    [
-      `type=volume,source=${captureVolume},target=/evidence,volume-nocopy`
-    ]
+    [{ source: captureVolume, target: "/evidence" }]
   );
   await runCommand("docker", ["container", "start", captureId], {
     timeoutMs: 10_000
@@ -1275,7 +1303,7 @@ async function createHelper(
   capabilities: string[],
   command: string[],
   networkMode: string,
-  mounts: string[] = []
+  mounts: HelperVolumeMount[] = []
 ): Promise<string> {
   const name = `cn-${role}-${state.runId.slice(-8)}`;
   if (
@@ -1311,7 +1339,10 @@ async function createHelper(
     args.push("--cap-add", capability);
   }
   for (const mount of mounts) {
-    args.push("--mount", mount);
+    args.push(
+      "--mount",
+      `type=volume,source=${mount.source},target=${mount.target},volume-nocopy`
+    );
   }
   args.push(
     "--security-opt",
@@ -1333,7 +1364,104 @@ async function createHelper(
   assertDockerId(id);
   reservation.id = id;
   await saveState(root, state);
+  const safety = await inspectAndValidateHelper(
+    state,
+    reservation,
+    capabilities,
+    command,
+    networkMode,
+    mounts
+  );
+  await writeRunArtifact(
+    root,
+    state,
+    `helpers/${role}.json`,
+    JSON.stringify(safety, null, 2) + "\n"
+  );
   return id;
+}
+
+async function inspectAndValidateHelper(
+  state: LabState,
+  reservation: DockerResourceReservation,
+  capabilities: string[],
+  command: string[],
+  networkMode: string,
+  expectedMounts: HelperVolumeMount[]
+): Promise<object> {
+  const id = requireId(reservation.id, reservation.role);
+  const inspected = JSON.parse(
+    (
+      await runCommand("docker", ["container", "inspect", id], {
+        timeoutMs: 10_000
+      })
+    ).stdout
+  ) as DockerContainerInspect[];
+  const container = inspected[0];
+  if (!container) {
+    throw new Error(`Helper ${reservation.name} inspect не вернул object.`);
+  }
+  const labels = container.Config.Labels ?? {};
+  const mounts = container.Mounts ?? [];
+  const exactMounts =
+    mounts.length === expectedMounts.length &&
+    expectedMounts.every((expected) =>
+      mounts.some(
+        (observed) =>
+          observed.Type === "volume" &&
+          observed.Name === expected.source &&
+          observed.Destination === expected.target &&
+          observed.RW === true
+      )
+    );
+  if (
+    container.Id !== id ||
+    container.Name !== `/${reservation.name}` ||
+    container.Config.Image !== LAB_IMAGE ||
+    !sameStringArray(container.Config.Cmd ?? [], command) ||
+    labels[LAB_LABEL_KEY] !== LAB_OWNER_LABEL ||
+    labels[LAB_RUN_LABEL_KEY] !== state.runId ||
+    labels[LAB_ROLE_LABEL_KEY] !== reservation.role ||
+    container.State.Running !== false ||
+    container.HostConfig.NetworkMode !== networkMode ||
+    !hasExactLiveContainerGuardrails(container, capabilities) ||
+    !exactMounts
+  ) {
+    throw new Error(
+      `Helper ${reservation.name} не подтвердил exact identity/network/capability/resource/mount contract: ${JSON.stringify(
+        {
+          id: container.Id,
+          name: container.Name,
+          image: container.Config.Image,
+          command: container.Config.Cmd,
+          labels,
+          running: container.State.Running,
+          networkMode: container.HostConfig.NetworkMode,
+          safety: normalizedContainerSafety(container),
+          mounts
+        }
+      )}`
+    );
+  }
+  return {
+    schemaVersion: 1,
+    observedAt: new Date().toISOString(),
+    id: container.Id,
+    name: container.Name.replace(/^\//, ""),
+    role: reservation.role,
+    image: container.Config.Image ?? null,
+    ownerLabel: labels[LAB_LABEL_KEY] ?? null,
+    runLabel: labels[LAB_RUN_LABEL_KEY] ?? null,
+    networkMode: container.HostConfig.NetworkMode ?? null,
+    ...normalizedContainerSafety(container),
+    command: container.Config.Cmd ?? [],
+    mounts: mounts.map((mount) => ({
+      type: mount.Type ?? null,
+      name: mount.Name ?? null,
+      destination: mount.Destination ?? null,
+      writable: mount.RW === true
+    }))
+  };
 }
 
 async function analyzeLivePcap(captureId: string): Promise<string> {
@@ -1795,21 +1923,21 @@ function validateEndpoint(
   ipv4: string,
   mac: string
 ): void {
+  const reservation =
+    expectedName === "cn-alpha"
+      ? state.containers.alpha
+      : state.containers.beta;
   const networks = Object.values(inspect.NetworkSettings?.Networks ?? {});
   const endpoint = networks[0];
-  const portBindings = inspect.HostConfig.PortBindings ?? {};
-  const ports = inspect.NetworkSettings?.Ports ?? {};
   if (
+    inspect.Id !== reservation.id ||
     inspect.Name !== `/${expectedName}` ||
     inspect.Config.Image !== LAB_IMAGE ||
+    inspect.Config.Labels?.[LAB_LABEL_KEY] !== LAB_OWNER_LABEL ||
     inspect.Config.Labels?.[LAB_RUN_LABEL_KEY] !== state.runId ||
+    inspect.Config.Labels?.[LAB_ROLE_LABEL_KEY] !== reservation.role ||
     inspect.State.Running !== true ||
-    inspect.HostConfig.Privileged !== false ||
-    inspect.HostConfig.ReadonlyRootfs !== true ||
-    !(inspect.HostConfig.CapDrop ?? []).includes("ALL") ||
-    (inspect.HostConfig.CapAdd ?? []).length !== 0 ||
-    Object.keys(portBindings).length !== 0 ||
-    Object.keys(ports).length !== 0 ||
+    !hasExactLiveContainerGuardrails(inspect, []) ||
     (inspect.Mounts ?? []).length !== 0 ||
     networks.length !== 1 ||
     endpoint?.IPAddress !== ipv4 ||
@@ -1828,19 +1956,80 @@ function normalizedEndpointInspect(inspect: DockerContainerInspect): object {
     id: inspect.Id,
     name: inspect.Name.replace(/^\//, ""),
     image: inspect.Config.Image ?? null,
+    ownerLabel: inspect.Config.Labels?.[LAB_LABEL_KEY] ?? null,
     runLabel: inspect.Config.Labels?.[LAB_RUN_LABEL_KEY] ?? null,
+    roleLabel: inspect.Config.Labels?.[LAB_ROLE_LABEL_KEY] ?? null,
     running: inspect.State.Running === true,
-    privileged: inspect.HostConfig.Privileged === true,
-    readonlyRootfs: inspect.HostConfig.ReadonlyRootfs === true,
-    capDrop: inspect.HostConfig.CapDrop ?? [],
-    capAdd: inspect.HostConfig.CapAdd ?? [],
+    ...normalizedContainerSafety(inspect),
     networkMode: inspect.HostConfig.NetworkMode ?? null,
-    portBindingCount: Object.keys(inspect.HostConfig.PortBindings ?? {}).length,
-    exposedPortCount: Object.keys(inspect.NetworkSettings?.Ports ?? {}).length,
     mountCount: inspect.Mounts?.length ?? 0,
     ipv4: endpoint?.IPAddress ?? null,
     mac: endpoint?.MacAddress?.toLowerCase() ?? null
   };
+}
+
+function hasExactLiveContainerGuardrails(
+  inspect: DockerContainerInspect,
+  expectedCapAdd: string[]
+): boolean {
+  const host = inspect.HostConfig;
+  const tmpfsOptions = (host.Tmpfs?.["/tmp"] ?? "")
+    .split(",")
+    .filter(Boolean);
+  return (
+    host.Privileged === false &&
+    host.ReadonlyRootfs === true &&
+    sameCapabilitySet(host.CapDrop ?? [], ["ALL"]) &&
+    sameCapabilitySet(host.CapAdd ?? [], expectedCapAdd) &&
+    (host.SecurityOpt ?? []).includes("no-new-privileges=true") &&
+    sameStringSet(tmpfsOptions, [...LIVE_TMPFS_OPTIONS]) &&
+    host.PidsLimit === 64 &&
+    host.Memory === 128 * 1024 * 1024 &&
+    host.NanoCpus === 500_000_000 &&
+    Object.keys(host.PortBindings ?? {}).length === 0 &&
+    Object.keys(inspect.NetworkSettings?.Ports ?? {}).length === 0
+  );
+}
+
+function normalizedContainerSafety(inspect: DockerContainerInspect): object {
+  return {
+    privileged: inspect.HostConfig.Privileged === true,
+    readonlyRootfs: inspect.HostConfig.ReadonlyRootfs === true,
+    capDrop: inspect.HostConfig.CapDrop ?? [],
+    capAdd: inspect.HostConfig.CapAdd ?? [],
+    securityOptions: inspect.HostConfig.SecurityOpt ?? [],
+    tmpfs: inspect.HostConfig.Tmpfs ?? {},
+    pidsLimit: inspect.HostConfig.PidsLimit ?? null,
+    memoryBytes: inspect.HostConfig.Memory ?? null,
+    nanoCpus: inspect.HostConfig.NanoCpus ?? null,
+    portBindingCount: Object.keys(inspect.HostConfig.PortBindings ?? {}).length,
+    exposedPortCount: Object.keys(inspect.NetworkSettings?.Ports ?? {}).length
+  };
+}
+
+function sameStringArray(actual: string[], expected: string[]): boolean {
+  return (
+    actual.length === expected.length &&
+    actual.every((value, index) => value === expected[index])
+  );
+}
+
+function sameStringSet(actual: string[], expected: string[]): boolean {
+  return (
+    actual.length === expected.length &&
+    expected.every((value) => actual.includes(value))
+  );
+}
+
+function sameCapabilitySet(actual: string[], expected: string[]): boolean {
+  return sameStringSet(
+    actual.map(normalizeCapability),
+    expected.map(normalizeCapability)
+  );
+}
+
+function normalizeCapability(value: string): string {
+  return value.toUpperCase().replace(/^CAP_/, "");
 }
 
 async function inspectNetworkSubnets(): Promise<{

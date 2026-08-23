@@ -4,12 +4,27 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   getReservedContainerCleanupOrder,
+  isMissingFileError,
   readState,
   reserveState,
   saveState
 } from "../src/state.js";
 
 describe("persisted Docker recovery state", () => {
+  it("treats only ENOENT as an absent state file", () => {
+    expect(
+      isMissingFileError(
+        Object.assign(new Error("missing"), { code: "ENOENT" })
+      )
+    ).toBe(true);
+    expect(
+      isMissingFileError(
+        Object.assign(new Error("denied"), { code: "EACCES" })
+      )
+    ).toBe(false);
+    expect(isMissingFileError(new Error("I/O failure"))).toBe(false);
+  });
+
   it("reserves live resource names before any Docker ID exists", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "network-state-"));
     const state = await reserveState(root, "01-04", {

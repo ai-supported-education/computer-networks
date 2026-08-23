@@ -246,13 +246,13 @@ The second bounded timeline may reuse an observed neighbour entry.
 The action started at 2026-08-23T00:01:00Z; markers are in .training/evidence/01-04/run-a/events.jsonl.
 
 ## Preflight and topology evidence
-.training/evidence/01-04/run-a/preflight.json records endpoint=unix:///var/run/docker.sock and networkInventory conflictCount=0; topology-inspect.json and baseline.txt prove the exact bounded topology.
+.training/evidence/01-04/run-a/preflight.json records endpoint=unix:///var/run/docker.sock and networkInventory conflictCount=0; topology-inspect.json and baseline.txt prove the exact bounded topology. Helper safety is observed in helpers/neigh-flush.json.
 
 ## Cold observations
-Cold ARP then ICMP observations cite .training/evidence/01-04/run-a/cold/neighbor-before.txt, cold/neighbor-after.txt, cold/capture.pcap, cold/capture.sha256.txt and cold/events.tsv. The ARP reply arp.src.hw_mac advertises 02:42:ac:1e:00:14. SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; matching identifier 7 sequence 1.
+Cold ARP then ICMP observations cite .training/evidence/01-04/run-a/cold/neighbor-before.txt, cold/neighbor-after.txt, cold/capture.pcap, cold/capture.sha256.txt, cold/events.tsv, helpers/capture-cold.json and helpers/probe-cold.json. The ARP reply arp.src.hw_mac advertises 02:42:ac:1e:00:14. SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; matching identifier 7 sequence 1.
 
 ## Warm observations
-Warm ICMP observations cite .training/evidence/01-04/run-a/warm/neighbor-before.txt, warm/neighbor-after.txt, warm/capture.pcap, warm/capture.sha256.txt and warm/events.tsv. SHA bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; matching identifier 8 sequence 2.
+Warm ICMP observations cite .training/evidence/01-04/run-a/warm/neighbor-before.txt, warm/neighbor-after.txt, warm/capture.pcap, warm/capture.sha256.txt, warm/events.tsv, helpers/capture-warm.json and helpers/probe-warm.json. SHA bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; matching identifier 8 sequence 2.
 
 ## Comparison and inference
 The comparison separates captured observations from the bounded inference.

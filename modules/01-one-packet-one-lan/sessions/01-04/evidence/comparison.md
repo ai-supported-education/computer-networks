@@ -22,17 +22,20 @@ TODO: UTC start marker из `events.jsonl` и один unique
 TODO: exact ссылки/observations из `preflight.json`, `topology-inspect.json` и
 `baseline.txt`: local `unix://` Docker endpoint, `conflictCount=0`, initial
 container/network/volume counts, target/interface, isolation, limits и exposure.
+Добавьте `helpers/neigh-flush.json` с фактически подтверждёнными guardrails.
 
 ## Cold observations
 
 TODO: `cold/neighbor-before.txt`, `cold/neighbor-after.txt`, `cold/capture.pcap`,
 `cold/capture.sha256.txt`, `cold/events.tsv`, ARP order, advertised beta
-`arp.src.hw_mac=02:42:ac:1e:00:14`, Ethernet directions и matching ICMP id/seq.
+`arp.src.hw_mac=02:42:ac:1e:00:14`, Ethernet directions, matching ICMP id/seq и
+runtime snapshots `helpers/capture-cold.json`, `helpers/probe-cold.json`.
 
 ## Warm observations
 
 TODO: `warm/neighbor-before.txt`, `warm/neighbor-after.txt`, `warm/capture.pcap`,
 `warm/capture.sha256.txt`, `warm/events.tsv`, mapping и matching ICMP id/seq.
+Сошлитесь также на `helpers/capture-warm.json` и `helpers/probe-warm.json`.
 
 ## Comparison and inference
 

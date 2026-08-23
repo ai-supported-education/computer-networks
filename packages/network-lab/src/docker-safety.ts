@@ -98,7 +98,7 @@ export function isSafeDockerDaemonId(value: string): boolean {
 
 export function isNoSuchDockerObject(
   result: Pick<CommandResult, "stdout" | "stderr">,
-  kind: "container" | "network" | "volume"
+  kind: "container" | "image" | "network" | "volume"
 ): boolean {
   const message = `${result.stdout}\n${result.stderr}`;
   return (

@@ -75,5 +75,20 @@ describe("exact cleanup absence classification", () => {
         "network"
       )
     ).toBe(true);
+    expect(
+      isNoSuchDockerObject(
+        {
+          stdout: "",
+          stderr: "Error response from daemon: No such image: pinned"
+        },
+        "image"
+      )
+    ).toBe(true);
+    expect(
+      isNoSuchDockerObject(
+        { stdout: "", stderr: "permission denied connecting to Docker daemon" },
+        "image"
+      )
+    ).toBe(false);
   });
 });

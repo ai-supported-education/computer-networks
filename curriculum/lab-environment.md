@@ -39,6 +39,10 @@ condition. Fixed subnet `172.30.0.0/24` также должен не перес�
 конфликте используйте другой local учебный daemon или обратитесь к автору курса —
 не удаляйте и не перенастраивайте существующую сеть ради упражнения.
 
+Отсутствие pinned image признаётся только по exact Docker `No such image`.
+Ошибки daemon, permissions и timeout являются stop condition, а не поводом
+запускать `preload`.
+
 Каждый published lab image обязан иметь multi-platform manifest как минимум для
 linux/amd64 и linux/arm64. Image reference фиксируется автором; preflight
 сохраняет local image ID и Docker server OS/architecture. `uname -m` сохраняется
@@ -64,6 +68,10 @@ label; поздние Compose-карточки дополнительно фик
   run, копируется в evidence через `docker cp` и удаляется до PASS;
 - NET_RAW и NET_ADMIN выдаются только конкретному disposable service и только
   когда без них нельзя получить заявленный outcome;
+- endpoint и каждый helper проходят runtime `docker inspect` до принятия evidence:
+  проверяются exact labels/name, network mode, capabilities,
+  `no-new-privileges`, read-only rootfs, bounded tmpfs/CPU/memory/PIDs, mounts и
+  отсутствие ports;
 - automation печатает выполняемую Linux-команду, exact target и ограничения, а
   не скрывает изучаемый mechanism.
 

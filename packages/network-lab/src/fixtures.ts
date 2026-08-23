@@ -242,15 +242,21 @@ export async function preflightFixtureInspector(
       `Offline inspector требует Docker Linux amd64/arm64; observed ${server.Os ?? "unknown"}/${server.Arch ?? "unknown"}.`
     );
   }
-  const image = await runCommand(
+  const image = await tryCommand(
     "docker",
     ["image", "inspect", LAB_IMAGE, "--format", "{{.Id}}"],
     { timeoutMs: 10_000 }
-  ).catch(() => {
+  );
+  if (image.exitCode !== 0) {
+    if (isNoSuchDockerObject(image, "image")) {
+      throw new Error(
+        "Pinned image не загружен. Выполните pnpm network:fixture preload, затем повторите preflight."
+      );
+    }
     throw new Error(
-      "Pinned image не загружен. Выполните pnpm network:fixture preload, затем повторите preflight."
+      `Pinned image нельзя безопасно проверить: ${image.stderr || image.stdout || "Docker не вернул причину"}`
     );
-  });
+  }
   if (!/^sha256:[a-f0-9]{64}$/.test(image.stdout.trim())) {
     throw new Error(`Неожиданный local image ID: ${image.stdout.trim()}`);
   }

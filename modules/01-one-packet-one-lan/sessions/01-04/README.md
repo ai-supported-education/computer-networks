@@ -137,7 +137,11 @@ interface/filter.
    значение не фиксируется между phases. Capture сначала
    пишется в exact labelled volume, затем `docker cp` создаёт host artifact от
    имени вызывающего пользователя. Повтор создаёт новый run directory и не
-   перезаписывает raw pcap.
+   перезаписывает raw pcap. До запуска каждого helper runner сохраняет
+   `helpers/<role>.json` из фактического Docker inspect и сверяет exact name/labels,
+   shared network namespace, только нужную capability (`NET_RAW` для capture/probe
+   или `NET_ADMIN` для bounded neighbor flush), `no-new-privileges`, read-only
+   rootfs, bounded tmpfs/CPU/memory/PIDs, mounts и отсутствие published ports.
 3. Укажите один exact run directory в `evidence/comparison.md`. Перенесите
    фактические neighbor-before/after, pcap SHA-256 и normalized event rows со
    ссылками на `cold/` и `warm/`, не фиксируя как invariant timestamps, IP ID,
@@ -193,6 +197,8 @@ interface/filter.
 - [ ] Matching Echo pairs доказаны observed identifier/sequence внутри каждой phase.
 - [ ] Cold ARP Reply рекламирует observed MAC beta; Ethernet directions Echo
       совпадают с fixed inventory.
+- [ ] `helpers/*.json` подтверждают runtime identity и минимальные safety/resource
+      guardrails всех capture/probe/neighbor helpers.
 - [ ] Raw post-check того же run подтверждает ноль labelled containers, networks
       и volumes после bounded reconciliation/quiescence window.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.

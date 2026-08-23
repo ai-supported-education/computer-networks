@@ -151,7 +151,8 @@ guardrails ручным `docker run --privileged`.
    ```
 
    В успешном run появятся `topology-inspect.json` с normalized Docker isolation,
-   capabilities, mounts/ports и exact endpoints и `baseline.txt` с Linux
+   exact labels, capabilities, `no-new-privileges`, read-only rootfs, bounded
+   tmpfs/CPU/memory/PIDs, mounts/ports и exact endpoints и `baseline.txt` с Linux
    interface evidence.
 4. Перенесите только существенные observed values и точные ссылки на
    `preflight.json`, `events.jsonl`, `topology-inspect.json` и `baseline.txt` одного
@@ -218,7 +219,8 @@ active state; не удаляйте чужие resources вручную, пов�
       labelled counts `0/0/0` для containers/networks/volumes, exact scope,
       Engine/architecture и image.
 - [ ] `topology-inspect.json` доказывает internal isolated network, exact endpoints,
-      отсутствие published ports/mounts/added endpoint capabilities.
+      отсутствие published ports/mounts/added endpoint capabilities и exact
+      runtime security/resource guardrails.
 - [ ] Observed interface, MAC, IPv4 и link state для обоих endpoints сохранены со
       ссылкой на raw output.
 - [ ] Source facts, observed и inference не смешаны.
