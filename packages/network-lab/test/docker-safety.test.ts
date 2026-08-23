@@ -90,5 +90,11 @@ describe("exact cleanup absence classification", () => {
         "image"
       )
     ).toBe(false);
+    expect(
+      isNoSuchDockerObject(
+        { stdout: "", stderr: "request timed out while inspecting image" },
+        "image"
+      )
+    ).toBe(false);
   });
 });

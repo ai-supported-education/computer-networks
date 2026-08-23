@@ -22,6 +22,11 @@ describe("persisted Docker recovery state", () => {
         Object.assign(new Error("denied"), { code: "EACCES" })
       )
     ).toBe(false);
+    expect(
+      isMissingFileError(
+        Object.assign(new Error("I/O failure"), { code: "EIO" })
+      )
+    ).toBe(false);
     expect(isMissingFileError(new Error("I/O failure"))).toBe(false);
   });
 

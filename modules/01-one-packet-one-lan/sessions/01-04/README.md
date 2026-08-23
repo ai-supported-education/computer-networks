@@ -55,8 +55,10 @@ timelines.
 Docker bridge не является «зеркальным портом»: третий обычный container не обязан
 получить known-unicast frames между двумя endpoints. Capture helper поэтому
 кратковременно разделяет network namespace `alpha`. Он видит тот же `eth0`, но
-получает только необходимые `NET_RAW`/`NET_ADMIN`; endpoints остаются без лишних
-capabilities. Docker socket внутрь containers не монтируется.
+получает только `NET_RAW`; такой же capability получает bounded probe. Отдельный
+neighbor-flush helper получает только `NET_ADMIN` и удаляется до capture.
+Endpoints остаются без лишних capabilities. Docker socket внутрь containers не
+монтируется.
 
 ## Разобранный пример 1: cold timeline
 
