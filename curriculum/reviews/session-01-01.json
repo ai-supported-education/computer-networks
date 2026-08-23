@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "scope": "session",
+  "id": "01-01",
+  "contentHash": "0e1979fcef6c194d24bf82f2b2ec31ad25ce26fad506d90484c8af5b8104a093",
+  "verdict": "PASS",
+  "reviewedAt": "2026-08-23T01:38:53.474Z",
+  "attestedAt": "2026-08-23T01:44:16.074Z",
+  "reportSha256": "39bc2ae29ed30d0e1bde695ed84183900f54fdc4120c3f139de8b95d7c7ca753",
+  "protocol": "blind-then-consistency-v1"
+}
