@@ -148,7 +148,10 @@ hypotheses.
    `diagnosis.md`: получите ISO UTC timestamp командой
    `node -e 'console.log(new Date().toISOString())'` и предскажите только
    operational contract — три immutable identities, три network-none parser runs
-   и cleanup каждого. Диагнозы не записывайте до observations.
+   и cleanup каждого. Например, допустимо заранее ожидать, что каждый verified
+   bundle даст отдельный run с четырьмя raw artifacts, `network_mode=none` и clean
+   post-check; какие protocol events окажутся внутри, до `inspect` оставьте
+   unknown. Диагнозы и target fields не записывайте до observations.
 3. Для каждого case проверьте hashes/provenance и получите canonical view:
 
    ```bash
@@ -172,7 +175,10 @@ hypotheses.
    каждого inspector action.
 5. В `diagnosis.md` заполните отдельный раздел Case A/B/C:
    - verified source facts/assumptions;
-   - cited observations;
+   - cited observations: для каждого case обязательны точные ссылки на его
+     `baseline.txt`, `action.txt` и `events.tsv`; используйте `path:line`, а для
+     packet evidence дополнительно frame number и exact fields. Для empty capture
+     сослитесь на bounded metadata, которая доказывает окно и отсутствие records;
    - last proven stage;
    - earliest disproven/not-proven transition;
    - bounded inference;
@@ -215,7 +221,8 @@ window неизвестен или canonical companion расходится с r
 - [ ] Expected записан до трёх action markers; run ledger связывает каждый case с
       preflight/events/inspect/post-check и clean post-state.
 - [ ] Для каждого case названы last proven и earliest missing/disproven stage с
-      точной evidence citation.
+      точными citations на соответствующие `baseline.txt`, `action.txt` и
+      `events.tsv`/bounded empty-capture metadata.
 - [ ] Root cause не объявлен известным там, где bundle задаёт только boundary.
 - [ ] Для каждого case сохранены unknowns и следующий различающий observation.
 - [ ] Все три offline inspector cleanup post-check сохранены; labelled counts/status

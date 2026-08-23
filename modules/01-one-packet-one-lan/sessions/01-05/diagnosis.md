@@ -3,7 +3,9 @@
 ## Expected before inspector actions
 
 TODO: один ISO UTC timestamp до первого `inspect`, expected operational contract и
-assumptions без заранее заполненных диагнозов.
+assumptions без заранее заполненных диагнозов или target fields. Допустимая форма
+Expected описывает три verified identities, три отдельных network-none runs,
+четыре raw artifacts и clean post-check каждого; protocol events пока unknown.
 
 ## Inspector run ledger
 
@@ -16,7 +18,8 @@ TODO: для Case A/B/C — отдельный `.training/evidence/01-05/<run-id
 
 ### Verified inputs and observations
 
-TODO: hash/provenance и точные evidence citations.
+TODO: hash/provenance и точные citations на `baseline.txt`, `action.txt` и
+`events.tsv`/bounded empty-capture metadata.
 
 ### Last proven stage
 
@@ -43,7 +46,8 @@ TODO: только предложите bounded read-only evidence, не зап�
 
 ### Verified inputs and observations
 
-TODO: hash/provenance и точные evidence citations.
+TODO: hash/provenance и точные citations на `baseline.txt`, `action.txt` и
+`events.tsv`/bounded empty-capture metadata.
 
 ### Last proven stage
 
@@ -69,7 +73,8 @@ TODO
 
 ### Verified inputs and observations
 
-TODO: hash/provenance и точные evidence citations.
+TODO: hash/provenance и точные citations на `baseline.txt`, `action.txt` и
+`events.tsv`/bounded empty-capture metadata.
 
 ### Last proven stage
 
