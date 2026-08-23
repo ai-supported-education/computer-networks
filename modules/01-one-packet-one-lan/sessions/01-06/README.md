@@ -5,8 +5,8 @@
 ## Результат и границы
 
 Вы получите новый synthetic evidence bundle
-`fixtures/01-06/novel-local-exchange.pcap` и восстановите причинный путь exchange
-в `packet-path.md`: от исходного interface state через link-layer delivery и
+`fixtures/01-06/novel-local-exchange.pcap` вместе с versioned baseline companion и
+восстановите причинный путь exchange в `packet-path.md`: от исходного interface state через link-layer delivery и
 neighbor evidence до IPv4/ICMP messages и обратно.
 
 Это интеграция главы, а не проверка памяти на названия. Для каждого шага нужно
@@ -88,31 +88,57 @@ reply. Expected и observed остаются разными.
 
 ## Процедура
 
-1. Проверьте identity/provenance и получите normalized view offline:
+1. Выполните `pnpm network:fixture preflight`. Продолжайте только после PASS для
+   local `unix://` endpoint и pinned image; при missing image используйте
+   `pnpm network:fixture preload` и повторите preflight.
+2. До `inspect` заполните в `packet-path.md` секции `Expected before action` и
+   `Assumptions`: получите timestamp командой
+   `node -e 'console.log(new Date().toISOString())'`, предскажите только форму
+   bounded evidence и зафиксируйте supplied one-LAN assumption. Не записывайте
+   target fields как observed до чтения raw output.
+3. Проверьте identity/provenance и получите normalized view offline:
 
    ```bash
    pnpm network:fixture verify fixtures/01-06/novel-local-exchange.pcap
    pnpm network:fixture inspect fixtures/01-06/novel-local-exchange.pcap
    ```
 
-   Остановитесь при hash mismatch, неизвестном origin, неожиданном network access
-   или расхождении raw/companion. Fixture не изменяйте.
-2. Не заглядывая в hints/solution, составьте в `packet-path.md` inventory всех
+   `inspect` создаёт unique `.training/evidence/01-06/<run-id>/` с
+   `preflight.txt`, `events.jsonl`, `inspect.txt` и `post-check.txt`. Остановитесь
+   при hash mismatch, неизвестном origin, неожиданном network access, cleanup без
+   `exact_container_absent=true` или расхождении raw/companion. Fixture не
+   изменяйте. При cleanup failure используйте только напечатанную команду с
+   failed run directory; recovery сверит сохранённые Docker endpoint, Engine ID,
+   reserved name/role, run label и container ID и дождётся bounded clean
+   quiescence:
+
+   ```bash
+   pnpm network:fixture cleanup .training/evidence/01-06/<failed-run-id>
+   pnpm network:lab status
+   ```
+
+   Не используйте broad Docker cleanup.
+4. Перенесите в `Inspector action and raw evidence` один run path, action timestamp
+   из `events.jsonl` и полный набор raw references. Companion citations оформляйте
+   как `path:line`; frame citations — как `inspect.txt`, `frame.number=N` и exact
+   `field=value`, чтобы было ясно, какое observation поддерживает стрелку.
+5. Не заглядывая в hints/solution, составьте в `packet-path.md` inventory всех
    frames: number, relative order, Ethernet src/dst/type, IPv4 src/dst/protocol или
    ARP fields, ICMP type там, где он действительно присутствует.
-3. Сгруппируйте frames в причинные stages. Для каждой стрелки укажите cited
+6. Сгруппируйте frames в причинные stages. Для каждой стрелки укажите cited
    observation; совпавший порядок сам по себе не доказывает внутреннюю причину.
-4. Заполните epistemic ledger:
+7. Заполните epistemic ledger:
    - source facts;
    - assumptions;
    - observations;
    - inferences;
    - минимум три unknowns.
-5. Дайте итог одной фразой, область применимости и один counterfactual: какое
+8. Дайте итог одной фразой, область применимости и один counterfactual: какое
    изменение evidence опровергло бы ваш основной inference.
 
-Live Docker topology не создаётся, поэтому cleanup состоит в проверке, что offline
-runner завершился и не оставил containers/networks:
+Live topology не создаётся, но offline inspector использует disposable container.
+Из `post-check.txt` того же run перенесите `checked_at`,
+`exact_container_absent=true` и нулевые labelled counts, затем проверьте status:
 
 ```bash
 pnpm network:lab status
@@ -120,22 +146,28 @@ pnpm network:lab status
 
 ## Проверка и evidence
 
-- Local: `network-evidence` проверяет fixture identity, inventory всех frames,
-  обязательные stages/ledger/counterfactual, cleanup и отсутствие TODO.
-- Empirical: TShark фактически читает versioned synthetic pcap offline.
+- Local: `network-evidence` проверяет fixture identity, один raw run, порядок
+  Expected/action/cleanup, inventory всех frames, обязательные sections/raw
+  references, cleanup marker и отсутствие TODO. Корректность causal
+  arrows/ledger/counterfactual проверяет agent.
+- Empirical: run-scoped `inspect.txt` сохраняет method и фактическое чтение
+  versioned synthetic pcap; `post-check.txt` доказывает cleanup того же run.
 - Agent: проверяет причинную связность, соответствие fields, epistemic labels,
   counterfactual и соблюдение границы главы.
 - Evidence: `packet-path.md`.
 
 ## DONE
 
-- [ ] Fixture hash/provenance проверены; все observed frames отражены в inventory.
+- [ ] Expected/assumptions записаны до action marker; fixture hash/provenance,
+      versioned `alpha:eth0` baseline и один unique raw run проверены.
+- [ ] Все observed frames отражены в inventory со ссылками на raw `inspect.txt`.
 - [ ] Каждая causal arrow ссылается на конкретное observation.
 - [ ] Source facts, assumptions, observations, inferences и минимум три unknowns
       разделены.
 - [ ] Итог ограничен данной LAN/fixture; CIDR/route/gateway не выданы за доказанные.
 - [ ] Counterfactual действительно мог бы опровергнуть inference.
-- [ ] Offline cleanup/status чист; `pnpm session:check` и agent review PASS.
+- [ ] Post-check того же run содержит `exact_container_absent=true`, labelled
+      counts/status чисты; `pnpm session:check` и agent review PASS.
 
 Глава завершена. Следующая опубликованная в будущем карточка начнёт вывод IPv4
 addressing и CIDR; продолжать её сейчас для DONE не требуется.

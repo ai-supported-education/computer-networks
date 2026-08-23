@@ -1,8 +1,11 @@
 import {
+  cleanupFixtureInspectorRun,
   generateFixtures,
   inspectFixture,
+  preflightFixtureInspector,
   verifyFixtures
 } from "./fixtures.js";
+import { preloadImage } from "./lab.js";
 import { findRepositoryRoot } from "./workspace.js";
 
 async function main(): Promise<void> {
@@ -25,6 +28,16 @@ async function main(): Promise<void> {
     process.stdout.write(`PASS fixture identity\n${verified.join("\n")}\n`);
     return;
   }
+  if (command === "preload") {
+    if (target) throw new Error("preload не принимает target.");
+    await preloadImage();
+    return;
+  }
+  if (command === "preflight") {
+    if (target) throw new Error("preflight не принимает target.");
+    process.stdout.write(`${await preflightFixtureInspector()}\n`);
+    return;
+  }
   if (command === "inspect") {
     if (!target) {
       throw new Error("inspect требует fixture file или bundle directory.");
@@ -32,8 +45,15 @@ async function main(): Promise<void> {
     process.stdout.write(`${await inspectFixture(root, target)}\n`);
     return;
   }
+  if (command === "cleanup") {
+    if (!target) {
+      throw new Error("cleanup требует failed run directory из предыдущей ошибки.");
+    }
+    process.stdout.write(`${await cleanupFixtureInspectorRun(root, target)}\n`);
+    return;
+  }
   throw new Error(
-    "Usage: pnpm network:fixture [verify [target] | inspect <target> | generate]"
+    "Usage: pnpm network:fixture [preload | preflight | verify [target] | inspect <target> | cleanup <failed-run-directory> | generate]"
   );
 }
 

@@ -1,8 +1,20 @@
 # Packet path 01-06
 
+## Expected before action
+
+TODO: ISO UTC timestamp до `inspect`, ожидаемая форма bounded evidence и границы
+вывода без target observations.
+
+## Inspector action and raw evidence
+
+TODO: один `.training/evidence/01-06/<run-id>/`, action timestamp из
+`events.jsonl` и ссылки на `preflight.txt`, `events.jsonl`, `inspect.txt` и
+`post-check.txt`.
+
 ## Fixture identity and provenance
 
-TODO: path, observed SHA-256, synthetic provenance.
+TODO: path, observed SHA-256, synthetic provenance и versioned
+`novel-local-exchange.baseline.txt`.
 
 ## Source facts
 
@@ -18,7 +30,8 @@ TODO: все frame numbers и применимые Ethernet/ARP/IPv4/ICMP fields
 
 ## Causal stages
 
-TODO: stages и стрелки с точными evidence citations.
+TODO: stages и стрелки; companion cite имеет форму `path:line`, frame cite —
+`inspect.txt`, `frame.number=N`, exact `field=value`.
 
 ## Observations
 
@@ -42,4 +55,5 @@ TODO: одна фраза и область применимости.
 
 ## Cleanup status
 
-TODO: фактический `network:lab status` после offline run.
+TODO: cleanup/post-check timestamp того же run, фактические
+`exact_container_absent=true`, labelled counts `0/0/0` и `network:lab status`.

@@ -29,12 +29,14 @@ Request endpoint `beta`. Для этой задачи заранее извес�
 адресов.
 
 ```text
-alpha process
-  └─ ICMP Echo Request              type=8
-      └─ IPv4 datagram              src=172.30.0.10, dst=172.30.0.20
-          └─ Ethernet frame         src=02:42:ac:1e:00:0a
-                                    dst=02:42:ac:1e:00:14
-              └─ alpha interface → local link → beta interface
+alpha process creates
+ICMP Echo Request
+  ↓ wrapped as payload of
+IPv4 datagram  src=172.30.0.10, dst=172.30.0.20
+  ↓ wrapped as payload of
+Ethernet frame src=02:42:ac:1e:00:0a, dst=02:42:ac:1e:00:14
+  ↓ outer frame is sent through
+alpha interface → local link → beta interface
 ```
 
 Это не четыре названия одного объекта.
@@ -79,14 +81,15 @@ ip.proto=1 icmp.type=8
 
 Из этой строки можно установить как факты наблюдения:
 
-- frame вышел с link-layer source `…:0a` к link-layer destination `…:14`;
+- Ethernet header содержит link-layer source `…:0a` и destination `…:14`;
 - Ethernet payload размечен как IPv4;
 - IPv4 datagram направлен от `.10` к `.20` и несёт ICMP;
 - ICMP message — Echo Request.
 
 Можно сделать ограниченный вывод: строка согласуется с локальным Echo Request от
-`alpha` к `beta`. Нельзя по одной строке утверждать, что `beta` получил frame,
-создал reply или что любой другой network path исправен.
+`alpha` к `beta`. Без отдельно заданных capture point и direction она не доказывает
+сам момент выхода через interface. Нельзя по одной строке утверждать, что `beta`
+получил frame, создал reply или что любой другой network path исправен.
 
 ## Разобранный сценарий 2: похожий frame, другой payload
 
@@ -127,7 +130,7 @@ eth.type=0x0806 arp.opcode=1 arp.src.proto_ipv4=172.30.0.10
 
 ## Quiz
 
-В `quiz.md` четыре самодостаточных сценария с полным набором входных данных.
+В `quiz.md` шесть самодостаточных сценариев с полным набором входных данных.
 Заполните `answers.json`: выберите вариант и напишите собственное объяснение в
 `reasons`. Формулировка намеренно не перечисляет слова, которые должны встретиться
 в объяснении.
@@ -144,6 +147,9 @@ eth.type=0x0806 arp.opcode=1 arp.src.proto_ipv4=172.30.0.10
 
 - [ ] Ответ дан на каждый вопрос, каждый `reason` написан своими словами.
 - [ ] В объяснениях interface, Ethernet/MAC, IPv4 и ICMP не названы одним объектом.
+- [ ] Направления MAC и IPv4 привязаны к соответствующим headers и endpoints.
+- [ ] Encapsulation при отправке и чтение headers снаружи внутрь при приёме
+      объяснены как разные направления обработки.
 - [ ] Выводы не шире показанного evidence.
 - [ ] `pnpm session:check` зелёный и agent review получил PASS.
 

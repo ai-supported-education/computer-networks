@@ -8,6 +8,7 @@ export interface CommandResult {
 
 export interface RunCommandOptions {
   cwd?: string;
+  log?: boolean;
   timeoutMs?: number;
   stdin?: "inherit" | "ignore";
   stdout?: "capture" | "inherit";
@@ -35,7 +36,7 @@ export async function runCommand(
   options: RunCommandOptions = {}
 ): Promise<CommandResult> {
   const printable = formatCommand(command, args);
-  process.stderr.write(`+ ${printable}\n`);
+  if (options.log !== false) process.stderr.write(`+ ${printable}\n`);
 
   return new Promise((resolve, reject) => {
     const child = spawn(command, [...args], {

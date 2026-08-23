@@ -1,5 +1,16 @@
 # Diagnosis 01-05
 
+## Expected before inspector actions
+
+TODO: один ISO UTC timestamp до первого `inspect`, expected operational contract и
+assumptions без заранее заполненных диагнозов.
+
+## Inspector run ledger
+
+TODO: для Case A/B/C — отдельный `.training/evidence/01-05/<run-id>/`,
+`action_at`, `cleanup_at`, ссылки на `preflight.txt`, `events.jsonl`, `inspect.txt`,
+`post-check.txt`, exact cleanup marker и labelled counts `0/0/0`.
+
 ## Case A — interface-not-ready
 
 ### Verified inputs and observations
@@ -82,3 +93,8 @@ TODO
 
 TODO: почему одинаковый верхнеуровневый symptom не означает одинаковую causal
 boundary.
+
+## Offline inspector cleanup
+
+TODO: три фактических `exact_container_absent=true` из post-check тех же runs и
+итоговый `pnpm network:lab status`.

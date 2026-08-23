@@ -11,6 +11,15 @@ describe("deterministic packet fixtures", () => {
     expect(pcap?.length).toBe(204);
     expect(sha256(pcap!)).toBe(KNOWN_FIXTURE_SHA256);
     expect(countPcapRecords(pcap!)).toBe(2);
+    const companion = fixture.artifacts.get(
+      "fixtures/01-03/known-neighbour.txt"
+    );
+    expect(companion?.toString("utf8")).toContain(
+      "frame_len\tframe_cap_len"
+    );
+    expect(companion?.toString("utf8")).toContain(
+      "ip_version\tip_hdr_len\tip_len"
+    );
   });
 
   it("ships three bounded diagnostic bundles and a six-frame novel fixture", () => {
@@ -26,6 +35,15 @@ describe("deterministic packet fixtures", () => {
     expect(countPcapRecords(getPcap("arp-no-reply"))).toBe(3);
     expect(countPcapRecords(getPcap("icmp-no-reply"))).toBe(3);
     expect(countPcapRecords(getPcap("novel-local-exchange"))).toBe(6);
+    expect(
+      getFixture("novel-local-exchange").artifacts.has(
+        "fixtures/01-06/novel-local-exchange.baseline.txt"
+      )
+    ).toBe(true);
+    const novelBaseline = getFixture("novel-local-exchange")
+      .artifacts.get("fixtures/01-06/novel-local-exchange.baseline.txt")
+      ?.toString("utf8");
+    expect(novelBaseline).toContain("recorded_at=2024-01-01T00:19:59.000Z");
     for (const caseId of [
       "interface-not-ready",
       "arp-no-reply",

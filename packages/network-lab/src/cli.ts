@@ -36,7 +36,7 @@ async function main(): Promise<void> {
     return shellLab(root, args[0]);
   }
   if (command === "down" && args.length === 0) return downLab(root);
-  if (command === "status" && args.length === 0) return statusLab();
+  if (command === "status" && args.length === 0) return statusLab(root);
   throw new Error(usage());
 }
 

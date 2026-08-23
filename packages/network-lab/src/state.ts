@@ -11,21 +11,38 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { DOCKER_ID_PATTERN } from "./constants.js";
+import {
+  isSafeDockerDaemonId,
+  type DockerEndpointInventory
+} from "./docker-safety.js";
 
 export interface LabState {
-  schemaVersion: 1;
+  schemaVersion: 3;
   runId: string;
   sessionId: "01-02" | "01-04";
   createdAt: string;
   runDirectory: string;
   sequence: number;
   baselinePassed: boolean;
-  networkId: string | null;
-  containerIds: {
-    alpha: string | null;
-    beta: string | null;
-    helpers: string[];
+  dockerEndpoint: DockerEndpointInventory;
+  network: DockerResourceReservation;
+  volumes: DockerNamedResourceReservation[];
+  containers: {
+    alpha: DockerResourceReservation;
+    beta: DockerResourceReservation;
+    helpers: DockerResourceReservation[];
   };
+}
+
+export interface DockerResourceReservation {
+  name: string;
+  role: string;
+  id: string | null;
+}
+
+export interface DockerNamedResourceReservation {
+  name: string;
+  role: string;
 }
 
 export interface LabEvent {
@@ -39,10 +56,11 @@ export interface LabEvent {
 
 export async function reserveState(
   root: string,
-  sessionId: "01-02" | "01-04"
+  sessionId: "01-02" | "01-04",
+  dockerEndpoint: DockerEndpointInventory
 ): Promise<LabState> {
   const stateFile = getStateFile(root);
-  const existing = await lstat(stateFile).catch(() => null);
+  const existing = await lstatIfPresent(stateFile);
   if (existing) {
     throw new Error(
       "Уже есть active lab state. Выполните network:lab status/down."
@@ -55,17 +73,19 @@ export async function reserveState(
     path.join(".training", "evidence", sessionId, runId)
   );
   const state: LabState = {
-    schemaVersion: 1,
+    schemaVersion: 3,
     runId,
     sessionId,
     createdAt: now.toISOString(),
     runDirectory,
     sequence: 0,
     baselinePassed: false,
-    networkId: null,
-    containerIds: {
-      alpha: null,
-      beta: null,
+    dockerEndpoint,
+    network: { name: "cn-lab", role: "network", id: null },
+    volumes: [],
+    containers: {
+      alpha: { name: "cn-alpha", role: "alpha", id: null },
+      beta: { name: "cn-beta", role: "beta", id: null },
       helpers: []
     }
   };
@@ -90,7 +110,7 @@ export async function reserveState(
 
 export async function readState(root: string): Promise<LabState> {
   const stateFile = getStateFile(root);
-  const metadata = await lstat(stateFile).catch(() => null);
+  const metadata = await lstatIfPresent(stateFile);
   if (!metadata || !metadata.isFile() || metadata.isSymbolicLink()) {
     throw new Error("Active lab state не найден.");
   }
@@ -102,8 +122,25 @@ export async function readState(root: string): Promise<LabState> {
 export async function readStateIfPresent(
   root: string
 ): Promise<LabState | null> {
-  const exists = await lstat(getStateFile(root)).catch(() => null);
+  const exists = await lstatIfPresent(getStateFile(root));
   return exists ? readState(root) : null;
+}
+
+export function isMissingFileError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
+}
+
+async function lstatIfPresent(target: string) {
+  try {
+    return await lstat(target);
+  } catch (error) {
+    if (isMissingFileError(error)) return null;
+    throw error;
+  }
 }
 
 export async function saveState(root: string, state: LabState): Promise<void> {
@@ -156,6 +193,16 @@ export async function removeState(root: string): Promise<void> {
   await unlink(getStateFile(root));
 }
 
+export function getReservedContainerCleanupOrder(
+  state: LabState
+): DockerResourceReservation[] {
+  return [
+    ...state.containers.helpers.slice().reverse(),
+    state.containers.beta,
+    state.containers.alpha
+  ];
+}
+
 export function runPath(root: string, state: LabState, ...parts: string[]): string {
   return path.join(root, state.runDirectory, ...parts);
 }
@@ -170,36 +217,94 @@ function assertState(value: unknown): asserts value is LabState {
   }
   const state = value as Partial<LabState>;
   if (
-    state.schemaVersion !== 1 ||
+    state.schemaVersion !== 3 ||
     typeof state.runId !== "string" ||
     !/^[a-zA-Z0-9-]+$/.test(state.runId) ||
     (state.sessionId !== "01-02" && state.sessionId !== "01-04") ||
     typeof state.runDirectory !== "string" ||
-    !state.runDirectory.startsWith(`.training/evidence/${state.sessionId}/`) ||
+    state.runDirectory !==
+      `.training/evidence/${state.sessionId}/${state.runId}` ||
     typeof state.sequence !== "number" ||
     typeof state.baselinePassed !== "boolean" ||
-    !state.containerIds ||
-    (state.networkId !== null && typeof state.networkId !== "string") ||
-    (state.containerIds.alpha !== null &&
-      typeof state.containerIds.alpha !== "string") ||
-    (state.containerIds.beta !== null &&
-      typeof state.containerIds.beta !== "string") ||
-    !Array.isArray(state.containerIds.helpers) ||
-    state.containerIds.helpers.some((id) => typeof id !== "string")
+    !state.dockerEndpoint ||
+    typeof state.dockerEndpoint.context !== "string" ||
+    typeof state.dockerEndpoint.endpoint !== "string" ||
+    !state.dockerEndpoint.endpoint.startsWith("unix:///") ||
+    typeof state.dockerEndpoint.daemonId !== "string" ||
+    !isSafeDockerDaemonId(state.dockerEndpoint.daemonId) ||
+    !["context", "DOCKER_CONTEXT", "DOCKER_HOST"].includes(
+      state.dockerEndpoint.source ?? ""
+    ) ||
+    !state.network ||
+    !state.containers ||
+    !Array.isArray(state.volumes) ||
+    state.volumes.some(
+      (reservation) =>
+        !isVolumeReservation(reservation, state.runId as string)
+    ) ||
+    !isExactReservation(state.network, "cn-lab", "network") ||
+    !isExactReservation(state.containers.alpha, "cn-alpha", "alpha") ||
+    !isExactReservation(state.containers.beta, "cn-beta", "beta") ||
+    !Array.isArray(state.containers.helpers) ||
+    state.containers.helpers.some(
+      (reservation) =>
+        !isHelperReservation(reservation, state.runId as string)
+    )
   ) {
     throw new Error("Lab state имеет неверную schema.");
   }
-  const ids: (string | null)[] = [
-    state.networkId,
-    state.containerIds.alpha,
-    state.containerIds.beta,
-    ...state.containerIds.helpers
-  ];
-  for (const id of ids) {
-    if (id !== null && !DOCKER_ID_PATTERN.test(id)) {
-      throw new Error("Lab state содержит небезопасный Docker ID.");
-    }
+}
+
+function isExactReservation(
+  value: unknown,
+  name: string,
+  role: string
+): value is DockerResourceReservation {
+  if (!value || typeof value !== "object") return false;
+  const reservation = value as Partial<DockerResourceReservation>;
+  return (
+    reservation.name === name &&
+    reservation.role === role &&
+    (reservation.id === null ||
+      (typeof reservation.id === "string" &&
+        DOCKER_ID_PATTERN.test(reservation.id)))
+  );
+}
+
+function isHelperReservation(
+  value: unknown,
+  runId: string
+): value is DockerResourceReservation {
+  if (!value || typeof value !== "object") return false;
+  const reservation = value as Partial<DockerResourceReservation>;
+  if (
+    typeof reservation.role !== "string" ||
+    !/^(?:capture-(?:cold|warm)|probe-(?:cold|warm)|neigh-flush)$/.test(
+      reservation.role
+    )
+  ) {
+    return false;
   }
+  return (
+    reservation.name === `cn-${reservation.role}-${runId.slice(-8)}` &&
+    (reservation.id === null ||
+      (typeof reservation.id === "string" &&
+        DOCKER_ID_PATTERN.test(reservation.id)))
+  );
+}
+
+function isVolumeReservation(
+  value: unknown,
+  runId: string
+): value is DockerNamedResourceReservation {
+  if (!value || typeof value !== "object") return false;
+  const reservation = value as Partial<DockerNamedResourceReservation>;
+  return (
+    reservation.role === "capture-data" &&
+    typeof reservation.name === "string" &&
+    /^cn-capture-(?:cold|warm)-[a-f0-9]{8}$/.test(reservation.name) &&
+    reservation.name.endsWith(runId.slice(-8))
+  );
 }
 
 function toPosix(value: string): string {

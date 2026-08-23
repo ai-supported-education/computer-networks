@@ -2,15 +2,23 @@
 
 ## Invariants для PASS
 
+- Expected operational contract записан до всех трёх inspector action markers;
+  ledger содержит три unique preflight/events/inspect/post-check runs с
+  упорядоченными timestamps и clean labelled counts.
 - Все три bundles идентифицированы verified hash/provenance.
 - Каждый case содержит точные citations на baseline/action/events, а не пересказ
   названия directory.
 - Last proven stage и earliest missing/disproven transition согласованы с causal
-  ladder; более поздний симптом не подменяет первую границу.
+  ladder; ARP Request и matching Reply не слиты, а S5/S6 различают Ethernet, IPv4
+  и ICMP evidence; более поздний симптом не подменяет первую границу.
 - Bounded inference не объявляет конкретный root cause без различающего evidence.
 - Для каждого case сохранены минимум две правдоподобные unknowns и предложено одно
   безопасное следующее наблюдение.
 - Cross-case comparison объясняет, почему общий «ping failed» недостаточен.
+- Отсутствие формулируется как «не наблюдалось» в bounded capture; emission не
+  объявляется фактом без отдельного evidence.
+- Для каждого из трёх inspect post-check сохранил `exact_container_absent=true` и
+  нулевые labelled counts; final status чист.
 
 ## Valid alternatives
 
@@ -22,8 +30,10 @@
 
 ## Evidence and safety
 
-Fixtures immutable и synthetic; network access не нужен. Изменение raw artifacts,
-пропуск hash mismatch или запуск probes против внешних targets блокируют PASS.
+Fixtures immutable и synthetic; inspector допускает только local `unix://`
+Docker endpoint, использует `--network none` и не bind-mount-ит host paths.
+Изменение raw artifacts, пропуск hash mismatch или запуск probes против внешних
+targets блокируют PASS.
 
 ## Optional improvements
 
