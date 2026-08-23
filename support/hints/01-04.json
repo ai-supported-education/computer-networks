@@ -6,11 +6,11 @@
     },
     {
       "title": "Два источника evidence",
-      "body": "Вывод о reuse нельзя строить только на отсутствии ARP. Сопоставьте capture с observed IPv4-to-MAC mapping в neighbor-before warm-run и укажите capture point/bounds."
+      "body": "Вывод о reuse нельзя строить только на отсутствии ARP. Сопоставьте capture с observed IPv4-to-MAC mapping в neighbor-before warm phase и проверьте, что target ARP отсутствует именно до первого Echo Request. Укажите capture point и bounds."
     },
     {
       "title": "Каркас comparison.md",
-      "body": "Сначала оставьте предзаписанные predictions, затем unique run path/start marker. В cold и warm секциях цитируйте конкретные raw files и frame rows. После comparison назовите альтернативу, variable fields и фактический clean status после down."
+      "body": "Сначала predictions и action marker одного run. Preflight должен дать local endpoint, Engine ID, conflictCount=0 и initial 0/0/0; topology/helper inspect — isolation и capabilities. В cold/warm процитируйте neighbor, pcap, TSV и пять helpers/*.json. Завершите альтернативой, variable fields и raw post-check с bounded quiescence и exact/labelled 0/0/0."
     }
   ]
 }

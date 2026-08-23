@@ -6,11 +6,11 @@
     },
     {
       "title": "Разделите поля и арифметику",
-      "body": "Для каждого frame сначала выпишите extracted fields, затем отдельной строкой проверьте длину: IPv4 header + ICMP header + payload, после чего добавьте Ethernet header."
+      "body": "Для каждого frame сначала выпишите extracted fields, затем отдельно проверьте ip.len и frame.cap_len. frame.len — исходная сообщённая длина, frame.cap_len — реально сохранённые bytes; их равенство нужно установить из raw run, а не предположить."
     },
     {
       "title": "Каркас финальной сверки",
-      "body": "Нужны verified SHA-256, два frame id, направления MAC и IPv4, EtherType, protocol, ICMP type/code, две проверки 20 + 8 + 32 и 14 + IPv4 length, а также пометка об отсутствующем FCS и минимум два unknown."
+      "body": "Свяжите Expected → action marker → inspect.txt → post-check.txt одного exact run. Нужны verified SHA-256, два frame id, MAC/IPv4 directions, selectors, type/code, обе length-проверки, различие frame.len/frame.cap_len, parser safety snapshot, exact_container_absent=true и labelled 0/0/0. При cleanup failure используйте только напечатанный exact run-directory recovery."
     }
   ]
 }

@@ -2,6 +2,11 @@
 
 Все утверждения ниже относятся только к versioned synthetic bundles.
 
+До первого inspector action нужен один global Expected timestamp. В run ledger
+три case связываются с тремя разными `.training/evidence/01-05/<run-id>/` и своими
+`preflight.txt`, `events.jsonl`, `inspect.txt`, `post-check.txt`; для каждого
+`action_at < cleanup_at`, `exact_container_absent=true` и labelled `0/0/0`.
+
 ## interface-not-ready
 
 Baseline показывает `eth0 state DOWN` и `ipv4=not-observed`; bounded events не
@@ -12,8 +17,8 @@ cause, поведение beta и причина состояния interface о
 ## arp-no-reply
 
 Baseline доказывает `eth0 UP`, source MAC/IPv4 и отсутствие neighbor entry.
-Events 1–3 доказывают повторные ARP requests; matching reply и последующий ICMP
-не наблюдаются в заданном окне. Граница — переход от ARP request к reply/mapping,
+Events 1–3 доказывают повторные ARP requests (S3a); matching reply (S3b) и
+последующий ICMP не наблюдаются в заданном окне. Граница — переход S3a → S3b,
 но fixture не различает состояние beta, delivery и capture omission вне bounds.
 
 ## icmp-no-reply
@@ -25,3 +30,5 @@ request; это не доказывает, был ли request принят ил
 Безопасное следующее наблюдение в каждом case должно быть read-only, bounded и
 различать названные hypotheses: например, второй заранее заданный capture point
 или endpoint-local log в synthetic lab, но не произвольный внешний probe.
+При cleanup failure анализ не становится PASS: применяется только напечатанная
+recovery-команда exact run directory с persisted daemon/resource identity.

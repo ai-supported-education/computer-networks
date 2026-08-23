@@ -6,11 +6,11 @@
     },
     {
       "title": "Помечайте тип каждого утверждения",
-      "body": "Фиксированный inventory/provenance — source facts; одна LAN — supplied assumption; extracted rows — observations; объяснение последовательности — inference. Всё, чего capture не показывает, оставьте unknown."
+      "body": "Expected запишите до action. Фиксированный inventory/provenance — source facts; одна LAN — supplied assumption; строки exact inspect run — observations; объяснение последовательности — inference. Каждая causal arrow должна ссылаться на конкретный frame/raw row."
     },
     {
       "title": "Проверка полноты отчёта",
-      "body": "Покройте ARP request/reply, две пары ICMP request/reply, точные citations, минимум три unknowns и counterfactual, который меняет конкретное evidence и тем самым ломает главный inference. Завершите фактическим network:lab status."
+      "body": "Свяжите один run: preflight/events/inspect/post-check, verified pcap и baseline companion. Покройте ARP request/reply, две ICMP пары, exact citations, минимум три unknowns и counterfactual, меняющий evidence. Завершите exact_container_absent=true и labelled 0/0/0; при failure используйте только напечатанный run-directory recovery."
     }
   ]
 }

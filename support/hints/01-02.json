@@ -6,11 +6,11 @@
     },
     {
       "title": "Сверьте evidence с raw run",
-      "body": "Откройте уникальную папку, напечатанную командой baseline. Переносите в Markdown только фактически наблюдавшиеся строки и укажите путь к исходному файлу."
+      "body": "Выберите один canonical successful run и сверьте Markdown с его preflight.json, events.jsonl, topology-inspect.json, baseline.txt и post-check.txt. Предыдущие неудачные попытки перечисляйте отдельно bare run id, не смешивая их полные пути с canonical evidence."
     },
     {
       "title": "Пройдите lifecycle по секциям artifact",
-      "body": "В baseline.md должны различаться expected, action start, raw reference, alpha, beta, inference/unknowns. В post-check.md — cleanup command/time, фактические counts и явный вывод о конечном состоянии. Если status не нулевой, сначала завершите cleanup."
+      "body": "В baseline.md Expected timestamp должен предшествовать action marker; preflight фиксирует local unix endpoint, Engine ID, conflictCount=0 и initial 0/0/0, topology-inspect — runtime isolation/security, а alpha и beta — отдельные interface observations. В post-check.md разделите cleanup action time и checked_at, процитируйте quiescence и exact/labelled 0/0/0. При ненулевом status PASS невозможен."
     }
   ]
 }
