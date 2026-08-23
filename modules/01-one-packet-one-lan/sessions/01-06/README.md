@@ -124,16 +124,33 @@ reply. Expected и observed остаются разными.
    `field=value`, чтобы было ясно, какое observation поддерживает стрелку.
 5. Не заглядывая в hints/solution, составьте в `packet-path.md` inventory всех
    frames: number, relative order, Ethernet src/dst/type, IPv4 src/dst/protocol или
-   ARP fields, ICMP type там, где он действительно присутствует.
-6. Сгруппируйте frames в причинные stages. Для каждой стрелки укажите cited
+   ARP fields, а для ICMP — `icmp.type`, `icmp.ident` и `icmp.seq` там, где они
+   действительно присутствуют.
+6. В секции `Echo pair correlation` отдельно сопоставьте request frame 3 с reply
+   frame 4 и request frame 5 с reply frame 6. Не опирайтесь только на порядок:
+   перенесите из raw `inspect.txt` поля каждого Echo frame в четыре строки точного
+   формата:
+
+   ```text
+   echo_frame=3 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
+   echo_frame=4 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
+   echo_frame=5 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
+   echo_frame=6 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
+   ```
+
+   Затем явно объясните pairing 3→4 и 5→6. Внутри каждой доказанной пары
+   identifier и sequence должны совпасть, обе пары `eth.src/eth.dst` и
+   `ip.src/ip.dst` — развернуться, а request/reply types — соответствовать Echo.
+   Sequence двух exchanges должен позволять отличить одну пару от другой.
+7. Сгруппируйте frames в причинные stages. Для каждой стрелки укажите cited
    observation; совпавший порядок сам по себе не доказывает внутреннюю причину.
-7. Заполните epistemic ledger:
+8. Заполните epistemic ledger:
    - source facts;
    - assumptions;
    - observations;
    - inferences;
    - минимум три unknowns.
-8. Дайте итог одной фразой, область применимости и один counterfactual: какое
+9. Дайте итог одной фразой, область применимости и один counterfactual: какое
    изменение evidence опровергло бы ваш основной inference.
 
 Live topology не создаётся, но offline inspector использует disposable container.
@@ -147,8 +164,10 @@ pnpm network:lab status
 ## Проверка и evidence
 
 - Local: `network-evidence` проверяет fixture identity, один raw run, порядок
-  Expected/action/cleanup, inventory всех frames, обязательные sections/raw
-  references, cleanup marker и отсутствие TODO. Корректность causal
+  Expected/action/cleanup, inventory всех frames, точные Echo fields относительно
+  versioned normalized fixture, две пары с совпавшими identifier/sequence и
+  reversed addresses, обязательные sections/raw references, cleanup marker и
+  отсутствие TODO. Корректность остальных causal
   arrows/ledger/counterfactual проверяет agent.
 - Empirical: run-scoped `inspect.txt` сохраняет method и фактическое чтение
   versioned synthetic pcap; `post-check.txt` доказывает cleanup того же run.
@@ -161,6 +180,8 @@ pnpm network:lab status
 - [ ] Expected/assumptions записаны до action marker; fixture hash/provenance,
       versioned `alpha:eth0` baseline и один unique raw run проверены.
 - [ ] Все observed frames отражены в inventory со ссылками на raw `inspect.txt`.
+- [ ] Для frames 3→4 и 5→6 отдельно доказано совпадение `icmp.ident` и
+      `icmp.seq`, разворот Ethernet/IPv4 addresses; пары различены по sequence.
 - [ ] Каждая causal arrow ссылается на конкретное observation.
 - [ ] Source facts, assumptions, observations, inferences и минимум три unknowns
       разделены.

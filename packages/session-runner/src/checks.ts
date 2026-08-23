@@ -72,7 +72,8 @@ async function runCheck(
   if (label === "network-evidence") {
     const validation = await validateNetworkEvidence(
       getSessionDirectory(root, session),
-      session.definition.id
+      session.definition.id,
+      root
     );
     return {
       label,

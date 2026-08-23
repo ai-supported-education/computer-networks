@@ -9,6 +9,10 @@
 - Causal stages покрывают source interface/link evidence, neighbor resolution или
   reuse, Ethernet delivery, IPv4/ICMP request и обратный evidence в том объёме,
   который реально присутствует.
+- Echo request/reply сопоставлены отдельно для frames 3→4 и 5→6: в каждой паре
+  observed `icmp.ident` и `icmp.seq` совпадают, Ethernet/IPv4 addresses развёрнуты,
+  а sequence отличает одну пару от другой. Близость или порядок frames сами по
+  себе не считаются доказательством сопоставления.
 - Каждая причинная стрелка имеет точную companion `path:line` либо raw
   `frame.number` + `field=value` citation; expected поведение не записано как
   observed.
@@ -23,8 +27,8 @@
 ## Valid alternatives
 
 - Timeline можно оформить таблицей, Mermaid/text diagram или нумерованными stages.
-- Допустимы разные уровни детализации payload, если headers/relations и epistemic
-  границы сохранены.
+- Допустимы разные уровни детализации payload, если обязательная correlation по
+  identifier/sequence, headers/relations и epistemic границы сохранены.
 - Иной counterfactual допустим, если связь с главным inference объяснена.
 
 ## Evidence and safety
