@@ -12,6 +12,8 @@
   endpoints, отсутствие published ports, mounts и added endpoint capabilities.
 - Для обоих endpoints cited raw evidence содержит interface, link state, MAC и
   IPv4; summary не подменяет отсутствующие значения ожиданиями.
+- Inference следует только из cited source facts/observations, не объявляет
+  packet delivery доказанной и явно сохраняет свойства вне baseline как unknown.
 - Raw run directory уникален и не перезаписывает предыдущую попытку.
 - Raw post-check того же run выполнен после cleanup и показывает ноль labelled
   containers, networks и volumes либо

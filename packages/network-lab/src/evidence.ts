@@ -454,6 +454,10 @@ function validateBaselineLifecycle(
     const section = baselineSections.find((candidate) =>
       new RegExp(`observed ${endpoint}`, "i").test(candidate.heading)
     );
+    const expected =
+      endpoint === "alpha"
+        ? { mac: "02:42:ac:1e:00:0a", ipv4: "172.30.0.10" }
+        : { mac: "02:42:ac:1e:00:14", ipv4: "172.30.0.20" };
     if (
       !section ||
       !/\bUP\b/.test(section.body) ||
@@ -461,6 +465,16 @@ function validateBaselineLifecycle(
     ) {
       failures.push(
         `evidence/baseline.md: Observed ${endpoint} должен отдельно содержать UP и LOWER_UP flags.`
+      );
+    }
+    if (
+      !section ||
+      !/\beth0\b/.test(section.body) ||
+      !section.body.toLowerCase().includes(expected.mac) ||
+      !section.body.includes(expected.ipv4)
+    ) {
+      failures.push(
+        `evidence/baseline.md: Observed ${endpoint} должен отдельно содержать eth0, MAC ${expected.mac} и IPv4 ${expected.ipv4}.`
       );
     }
   }
@@ -577,16 +591,16 @@ function validateMultipleFixtureLifecycles(
   const lifecycleRows = ledger
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => /action_at\s*=/.test(line));
+    .filter((line) => /inspect_action_at\s*=/.test(line));
   if (lifecycleRows.length !== expectedRunCount) {
     failures.push(
-      `${relativePath}: inspector ledger должен содержать ${expectedRunCount} action_at/cleanup_at rows.`
+      `${relativePath}: inspector ledger должен содержать ${expectedRunCount} inspect_action_at/cleanup_at rows.`
     );
   }
   const timestampPattern =
     "(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z)";
   const rowPattern = new RegExp(
-    `action_at\\s*=\\s*${timestampPattern}[\\s\\S]*cleanup_at\\s*=\\s*${timestampPattern}`,
+    `inspect_action_at\\s*=\\s*${timestampPattern}[\\s\\S]*cleanup_at\\s*=\\s*${timestampPattern}`,
     "i"
   );
   for (const row of lifecycleRows) {
@@ -594,14 +608,14 @@ function validateMultipleFixtureLifecycles(
     const actionAt = match?.[1] ? Date.parse(match[1]) : Number.NaN;
     const cleanupAt = match?.[2] ? Date.parse(match[2]) : Number.NaN;
     if (!Number.isFinite(actionAt) || !Number.isFinite(cleanupAt)) {
-      failures.push(`${relativePath}: ledger row не содержит parseable action_at/cleanup_at.`);
+      failures.push(`${relativePath}: ledger row не содержит parseable inspect_action_at/cleanup_at.`);
       continue;
     }
     if (expectedAt && expectedAt >= actionAt) {
       failures.push(`${relativePath}: Expected timestamp должен быть раньше каждого inspector action.`);
     }
     if (actionAt >= cleanupAt) {
-      failures.push(`${relativePath}: cleanup_at должен быть позже action_at.`);
+      failures.push(`${relativePath}: cleanup_at должен быть позже inspect_action_at.`);
     }
     if (!/(?:labelled(?:_counts)?\s*=\s*)?0\s*\/\s*0\s*\/\s*0/i.test(row)) {
       failures.push(`${relativePath}: каждый ledger row должен содержать labelled counts 0/0/0.`);

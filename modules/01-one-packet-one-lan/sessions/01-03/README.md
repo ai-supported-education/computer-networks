@@ -116,9 +116,12 @@ Source/destination pairs поменялись местами, а ICMP type ст�
    review; не обходите preflight ручным Docker-запуском.
 
 2. До `inspect` заполните `Expected before action` в `frame-map.md`: получите ISO
-   UTC timestamp командой `node -e 'console.log(new Date().toISOString())'` и
-   запишите ожидаемые identity/frame-count/safety свойства только из provenance.
-   Не переписывайте sample fields в observations.
+   UTC timestamp командой `node -e 'console.log(new Date().toISOString())'`.
+   Из fixture provenance как source facts перенесите только ожидаемые path/hash,
+   synthetic origin и frame count. Отдельно как pre-action expectations из
+   inspector contract этой карточки запишите local endpoint, `network=none`,
+   capability/mount/port/limit guardrails и обязательный cleanup. Не переписывайте
+   sample packet fields в observations.
 3. Проверьте provenance/hash и извлеките canonical поля в offline container:
 
    ```bash
@@ -162,9 +165,12 @@ Source/destination pairs поменялись местами, а ICMP type ст�
    применимость к VLAN/options/truncated captures.
 8. Подтвердите чистый labelled status командой `pnpm network:lab status`.
 
-Остановитесь, если hash отличается, fixture не synthetic по provenance, команда
-просит network access или TShark показывает не два frames. Не «чините» pcap и не
-подгоняйте карту; сохраните discrepancy как observed и запросите review.
+Остановитесь, если hash отличается, fixture не synthetic по provenance,
+`verify`/`inspect` или parser container просит network access либо TShark
+показывает не два frames. Единственное разрешённое исключение — отдельно
+описанный `network:fixture preload` при exact missing-image preflight; сам анализ
+остаётся offline. Не «чините» pcap и не подгоняйте карту; сохраните discrepancy
+как observed и запросите review.
 
 ## Проверка и evidence
 

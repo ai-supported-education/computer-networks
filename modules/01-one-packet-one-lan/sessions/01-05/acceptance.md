@@ -4,7 +4,8 @@
 
 `network-evidence` отклоняет TODO starter, отсутствие Expected checkpoint, трёх
 unique raw runs либо любого их `preflight.txt`/`events.jsonl`/`inspect.txt`/
-`post-check.txt`, неверный Expected/action/cleanup order, отсутствующий
+`post-check.txt`, отсутствие трёх exact `inspect_action_at`/`cleanup_at` rows,
+неверный Expected/inspect-action/cleanup order, отсутствующий
 case/required section, неточную fixture file citation, менее двух отдельных
 unknowns в case и менее трёх cleanup markers. Он требует все три fixed fixture
 directories и cross-case comparison. Минимальный structurally complete artifact

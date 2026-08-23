@@ -114,7 +114,9 @@ code cleanup-команды слабее: она могла ничего не н
 
    Это единственный шаг карточки, которому нужен registry access. Затем обязательно
    повторите `pnpm network:lab preflight` и продолжайте только после PASS. Все lab
-   runs используют локальный image с `--pull never`.
+   runs используют локальный image с `--pull never`. Загруженный pinned image —
+   общий prerequisite курса вне run-scoped topology: `down` намеренно не удаляет
+   его и учащемуся не нужно удалять image вручную.
 
 Кроме явно описанной ветки missing image, остановитесь, если preflight не PASS,
 endpoint не является local absolute `unix://` socket, Engine ID меняется между

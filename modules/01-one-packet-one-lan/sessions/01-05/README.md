@@ -45,6 +45,12 @@ mapping absent и после S3a нет S3b, отсутствие ICMP Request �
 границей данного run. S5/S6 требуют назвать вложенные Ethernet, IPv4 и ICMP
 evidence, а не только слово `ping`.
 
+S3b и S4 — тоже разные утверждения. Наблюдаемый ARP Reply доказывает содержимое
+frame, но сам по себе не доказывает, что source принял mapping. S4 можно подтвердить
+отдельным neighbor snapshot либо косвенно следующим Ethernet Request, который в
+той же bounded sequence использует рекламированный destination MAC. Если нет ни
+одного такого evidence, граница остаётся между S3b и S4.
+
 «Нет frame в capture» считается evidence только когда bundle подтверждает capture
 point, interval/filter и requested action. Иначе отсутствие могло возникнуть из-за
 ошибки наблюдения.
@@ -96,6 +102,21 @@ events: none
 границе готовности/эмиссии source; конкретная причина состояния DOWN остаётся
 unknown.
 
+## Micro-example: как выбрать следующий discriminator
+
+Предположим, source capture доказал S5, но не S6. Остались две hypotheses:
+
+- H1: matching request не дошёл до destination;
+- H2: request дошёл, но matching reply не был создан.
+
+Один bounded read-only capture в destination namespace для того же synthetic
+request различает их: при H1 matching ingress Request отсутствует, при H2 он
+присутствует. Такой вывод допустим только при заранее доказанных capture
+point/filter/window и completeness contract; без них отсутствие снова не
+различает hypotheses. В задании новый capture не запускайте — предложите
+аналогичное наблюдение и явно напишите разные ожидаемые результаты для оставшихся
+hypotheses.
+
 ## Три cases задания
 
 | Case | Directory | Наблюдаемый симптом |
@@ -143,9 +164,12 @@ unknown.
 
    Каждый `inspect` создаёт отдельный `.training/evidence/01-05/<run-id>/` с
    `preflight.txt`, `events.jsonl`, `inspect.txt` и `post-check.txt`.
-4. Заполните `Inspector run ledger`: для A/B/C укажите run path, `action_at` из
-   `events.jsonl`, `cleanup_at`/marker/counts из `post-check.txt` и все четыре raw
-   references. Global Expected timestamp должен быть раньше каждого action.
+4. Заполните `Inspector run ledger`: для A/B/C укажите run path,
+   `inspect_action_at` из текущего inspector `events.jsonl`,
+   `cleanup_at`/marker/counts из `post-check.txt` и все четыре raw references.
+   `inspect_action_at` — время offline parsing action, а не время synthetic Echo
+   probe из fixture `action.txt`. Global Expected timestamp должен быть раньше
+   каждого inspector action.
 5. В `diagnosis.md` заполните отдельный раздел Case A/B/C:
    - verified source facts/assumptions;
    - cited observations;
@@ -153,7 +177,8 @@ unknown.
    - earliest disproven/not-proven transition;
    - bounded inference;
    - минимум две remaining unknowns;
-   - один следующий minimum discriminating observation без запуска.
+   - один следующий minimum discriminating observation без запуска: назовите
+     competing hypotheses и разные ожидаемые результаты этого observation.
 6. Не меняйте fixtures. Каждый `inspect` запускает exact labelled offline
    container без network, затем обязан завершиться секцией
    `exact_container_absent=true`. Перенесите три cleanup post-check в раздел

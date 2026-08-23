@@ -10,7 +10,8 @@
 - Expected timestamp не раньше Action start получает FAIL;
 - cleanup timestamp не позже Action start получает FAIL;
 - разные run ids в baseline и post-check получают FAIL;
-- отсутствие observed `UP` и `LOWER_UP` отдельно для двух endpoints получает FAIL;
+- отсутствие observed `eth0`, exact MAC, exact IPv4, `UP` или `LOWER_UP` отдельно
+  для любого из двух endpoints получает FAIL;
 - отсутствие local `unix://` endpoint, `networkInventory.conflictCount=0`,
   initial/final zero counts или isolation/no-port summary получает FAIL;
 - минимальный artifact, удовлетворяющий всем этим отношениям, получает PASS.
