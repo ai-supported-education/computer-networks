@@ -5,7 +5,9 @@
 До первого inspector action нужен один global Expected timestamp. В run ledger
 три case связываются с тремя разными `.training/evidence/01-05/<run-id>/` и своими
 `preflight.txt`, `events.jsonl`, `inspect.txt`, `post-check.txt`; для каждого
-`action_at < cleanup_at`, `exact_container_absent=true` и labelled `0/0/0`.
+`inspect_action_at < cleanup_at`, `exact_container_absent=true` и labelled
+`0/0/0`. `inspect_action_at` берётся из inspector `events.jsonl`, а не из
+synthetic fixture `action.txt`.
 
 ## interface-not-ready
 
@@ -27,8 +29,12 @@ Events 1–2 доказывают ARP request/reply, event 3 — outgoing Echo R
 Reply не наблюдается в двухсекундном окне. Граница находится после outgoing
 request; это не доказывает, был ли request принят или почему reply отсутствует.
 
+ARP Reply и S4 не следует сливать: mapping available подтверждается отдельным
+neighbor snapshot либо следующим Ethernet Request, использующим advertised MAC.
+
 Безопасное следующее наблюдение в каждом case должно быть read-only, bounded и
 различать названные hypotheses: например, второй заранее заданный capture point
-или endpoint-local log в synthetic lab, но не произвольный внешний probe.
+или endpoint-local log в synthetic lab, но не произвольный внешний probe. В
+предложении должны быть названы competing hypotheses и разные ожидаемые outcomes.
 При cleanup failure анализ не становится PASS: применяется только напечатанная
 recovery-команда exact run directory с persisted daemon/resource identity.

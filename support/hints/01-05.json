@@ -6,11 +6,11 @@
     },
     {
       "title": "Читайте bundle в фиксированном порядке",
-      "body": "Сначала provenance/hash и baseline, затем action/window/filter, потом events. В Inspector run ledger свяжите A/B/C с тремя разными raw run paths и их action_at/cleanup_at; global Expected должен быть раньше каждого action."
+      "body": "Сначала provenance/hash и baseline, затем synthetic action/window/filter, потом events. В Inspector run ledger свяжите A/B/C с тремя разными raw run paths и их inspect_action_at/cleanup_at; первый timestamp берётся из текущего inspector events.jsonl, а не из fixture action.txt. Global Expected должен быть раньше каждого inspect action."
     },
     {
       "title": "Проверьте три разные границы",
-      "body": "Разложите ladder на S1/S2/S3a/S3b/S4/S5: в A source readiness ещё не доказана; в B есть S3a, но нет S3b; в C resolution и outgoing Echo Request доказаны. Для каждого cite exact baseline/action/events, сохраните минимум две unknowns, предложите различающий read-only observation и зафиксируйте exact_container_absent=true своего run."
+      "body": "Разложите ladder на S1/S2/S3a/S3b/S4/S5: ARP Reply сам по себе ещё не доказывает S4 — нужен neighbor snapshot или последующее использование advertised MAC. Для каждого cite exact baseline/action/events, сохраните минимум две unknowns, а для следующего read-only observation назовите competing hypotheses и разные ожидаемые результаты. Зафиксируйте exact_container_absent=true своего run."
     }
   ]
 }
