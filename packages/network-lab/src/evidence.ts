@@ -251,6 +251,7 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
         /^source facts$/i,
         /^assumptions$/i,
         /frame inventory/i,
+        /echo pair correlation/i,
         /causal stages/i,
         /^observations$/i,
         /^inferences$/i,
@@ -293,7 +294,8 @@ const PLACEHOLDER =
 
 export async function validateNetworkEvidence(
   sessionDirectory: string,
-  sessionId: string
+  sessionId: string,
+  workspaceRoot?: string
 ): Promise<NetworkEvidenceValidation> {
   const rules = RULES[sessionId];
   if (!rules) {
@@ -364,6 +366,12 @@ export async function validateNetworkEvidence(
     }
     if (sessionId === "01-06") {
       validateMeaningfulUnknowns(rule.relativePath, sections, failures, 3);
+      await validateEchoPairCorrelation(
+        rule.relativePath,
+        sections,
+        workspaceRoot,
+        failures
+      );
     }
   }
 
@@ -767,6 +775,234 @@ function validateMeaningfulUnknowns(
   if (items.length < minimum) {
     failures.push(
       `${relativePath}: ${context} должен перечислить минимум ${minimum} отдельных unknowns.`
+    );
+  }
+}
+
+interface EchoFrameObservation {
+  frame: 3 | 4 | 5 | 6;
+  ethSrc: string;
+  ethDst: string;
+  ipSrc: string;
+  ipDst: string;
+  type: number;
+  ident: number;
+  sequence: number;
+}
+
+async function validateEchoPairCorrelation(
+  relativePath: string,
+  sections: readonly MarkdownSection[],
+  workspaceRoot: string | undefined,
+  failures: string[]
+): Promise<void> {
+  const matchingSections = sections.filter((section) =>
+    /echo pair correlation/i.test(section.heading)
+  );
+  if (matchingSections.length !== 1) {
+    failures.push(
+      `${relativePath}: нужна ровно одна section Echo pair correlation.`
+    );
+  }
+  const body = matchingSections.map((section) => section.body).join("\n");
+  if (!body) return;
+
+  const markerPattern = /^\s*(?:[-*]\s*)?echo_frame\s*=\s*(3|4|5|6)\b.*$/gim;
+  const markerCounts = new Map<number, number>();
+  for (const marker of body.matchAll(markerPattern)) {
+    const frame = Number(marker[1]);
+    markerCounts.set(frame, (markerCounts.get(frame) ?? 0) + 1);
+  }
+
+  const rowPattern =
+    /^\s*(?:[-*]\s*)?echo_frame\s*=\s*(3|4|5|6)\s+eth\.src\s*=\s*([0-9a-f:]+)\s+eth\.dst\s*=\s*([0-9a-f:]+)\s+ip\.src\s*=\s*([0-9.]+)\s+ip\.dst\s*=\s*([0-9.]+)\s+icmp\.type\s*=\s*(\d+)\s+icmp\.ident\s*=\s*(\d+)\s+icmp\.seq\s*=\s*(\d+)\s*$/gim;
+  const rows: EchoFrameObservation[] = [...body.matchAll(rowPattern)].map(
+    (match) => ({
+      frame: Number(match[1]) as EchoFrameObservation["frame"],
+      ethSrc: match[2]?.toLowerCase() ?? "",
+      ethDst: match[3]?.toLowerCase() ?? "",
+      ipSrc: match[4] ?? "",
+      ipDst: match[5] ?? "",
+      type: Number(match[6]),
+      ident: Number(match[7]),
+      sequence: Number(match[8])
+    })
+  );
+
+  const byFrame = new Map<EchoFrameObservation["frame"], EchoFrameObservation[]>();
+  for (const row of rows) {
+    const entries = byFrame.get(row.frame) ?? [];
+    entries.push(row);
+    byFrame.set(row.frame, entries);
+  }
+
+  for (const frame of [3, 4, 5, 6] as const) {
+    if ((markerCounts.get(frame) ?? 0) !== 1) {
+      failures.push(
+        `${relativePath}: нужна ровно одна Echo correlation row echo_frame=${frame}.`
+      );
+    }
+    if ((byFrame.get(frame) ?? []).length !== 1) {
+      failures.push(
+        `${relativePath}: row echo_frame=${frame} должна содержать parseable eth.src/dst, ip.src/dst, icmp.type, icmp.ident и icmp.seq.`
+      );
+    }
+  }
+
+  if (!workspaceRoot) {
+    failures.push(
+      `${relativePath}: workspace root нужен для сверки Echo rows с versioned fixture.`
+    );
+    return;
+  }
+  const expected = await readExpectedEchoFrames(
+    workspaceRoot,
+    relativePath,
+    failures
+  );
+  for (const frame of [3, 4, 5, 6] as const) {
+    const actual = byFrame.get(frame)?.[0];
+    const expectedFrame = expected.get(frame);
+    if (!actual || !expectedFrame) continue;
+    for (const field of [
+      "ethSrc",
+      "ethDst",
+      "ipSrc",
+      "ipDst",
+      "type",
+      "ident",
+      "sequence"
+    ] as const) {
+      if (actual[field] !== expectedFrame[field]) {
+        failures.push(
+          `${relativePath}: echo_frame=${frame} ${field} не совпадает с versioned fixture observation.`
+        );
+      }
+    }
+  }
+
+  validateEchoPair(
+    "3-4",
+    byFrame.get(3)?.[0],
+    byFrame.get(4)?.[0],
+    failures,
+    relativePath
+  );
+  validateEchoPair(
+    "5-6",
+    byFrame.get(5)?.[0],
+    byFrame.get(6)?.[0],
+    failures,
+    relativePath
+  );
+  const first = byFrame.get(3)?.[0];
+  const second = byFrame.get(5)?.[0];
+  if (first && second && first.sequence === second.sequence) {
+    failures.push(
+      `${relativePath}: Echo exchanges 3-4 и 5-6 должны различаться observed icmp.seq.`
+    );
+  }
+}
+
+async function readExpectedEchoFrames(
+  workspaceRoot: string,
+  relativePath: string,
+  failures: string[]
+): Promise<Map<EchoFrameObservation["frame"], EchoFrameObservation>> {
+  const fixturePath = path.join(
+    workspaceRoot,
+    "fixtures/01-06/novel-local-exchange.txt"
+  );
+  const metadata = await lstat(fixturePath).catch(() => null);
+  if (!metadata?.isFile() || metadata.isSymbolicLink()) {
+    failures.push(
+      `${relativePath}: versioned normalized fixture должен быть regular non-symlink file.`
+    );
+    return new Map();
+  }
+  const lines = (await readFile(fixturePath, "utf8"))
+    .split(/\r?\n/)
+    .filter(Boolean);
+  const header = lines[0]?.split("\t") ?? [];
+  const columns = new Map(header.map((name, index) => [name, index]));
+  const required = [
+    "frame",
+    "eth_src",
+    "eth_dst",
+    "ip_src",
+    "ip_dst",
+    "icmp_type",
+    "icmp_id",
+    "icmp_seq"
+  ];
+  if (required.some((name) => !columns.has(name))) {
+    failures.push(
+      `${relativePath}: versioned normalized fixture не содержит обязательные Echo columns.`
+    );
+    return new Map();
+  }
+  const value = (cells: string[], name: string): string =>
+    cells[columns.get(name) ?? -1] ?? "";
+  const result = new Map<EchoFrameObservation["frame"], EchoFrameObservation>();
+  const frameCounts = new Map<number, number>();
+  for (const line of lines.slice(1)) {
+    const cells = line.split("\t");
+    const frame = Number(value(cells, "frame"));
+    if (![3, 4, 5, 6].includes(frame)) continue;
+    frameCounts.set(frame, (frameCounts.get(frame) ?? 0) + 1);
+    result.set(frame as EchoFrameObservation["frame"], {
+      frame: frame as EchoFrameObservation["frame"],
+      ethSrc: value(cells, "eth_src").toLowerCase(),
+      ethDst: value(cells, "eth_dst").toLowerCase(),
+      ipSrc: value(cells, "ip_src"),
+      ipDst: value(cells, "ip_dst"),
+      type: Number(value(cells, "icmp_type")),
+      ident: Number(value(cells, "icmp_id")),
+      sequence: Number(value(cells, "icmp_seq"))
+    });
+  }
+  if (
+    result.size !== 4 ||
+    [3, 4, 5, 6].some((frame) => frameCounts.get(frame) !== 1)
+  ) {
+    failures.push(
+      `${relativePath}: versioned normalized fixture не содержит frames 3-6 ровно по одному разу.`
+    );
+  }
+  return result;
+}
+
+function validateEchoPair(
+  pair: "3-4" | "5-6",
+  request: EchoFrameObservation | undefined,
+  reply: EchoFrameObservation | undefined,
+  failures: string[],
+  relativePath: string
+): void {
+  if (!request || !reply) return;
+  if (request.type !== 8 || reply.type !== 0) {
+    failures.push(
+      `${relativePath}: pair=${pair} должна быть Echo Request type 8 и Reply type 0.`
+    );
+  }
+  if (request.ident !== reply.ident) {
+    failures.push(
+      `${relativePath}: pair=${pair} имеет несовпадающие request/reply icmp.ident.`
+    );
+  }
+  if (request.sequence !== reply.sequence) {
+    failures.push(
+      `${relativePath}: pair=${pair} имеет несовпадающие request/reply icmp.seq.`
+    );
+  }
+  if (
+    request.ethSrc !== reply.ethDst ||
+    request.ethDst !== reply.ethSrc ||
+    request.ipSrc !== reply.ipDst ||
+    request.ipDst !== reply.ipSrc
+  ) {
+    failures.push(
+      `${relativePath}: pair=${pair} не содержит разворот Ethernet/IPv4 addresses.`
     );
   }
 }

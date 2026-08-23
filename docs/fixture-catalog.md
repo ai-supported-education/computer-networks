@@ -1,6 +1,6 @@
 # Catalog of synthetic packet fixtures
 
-Этот каталог является reviewer-visible text companion для binary fixtures.
+Этот каталог является learner-visible inventory для binary fixtures.
 Все пакеты собраны детерминированным генератором
 packages/network-lab/src/fixtures.ts и не содержат host, user или external
 traffic. Canonical identity проверяется командой pnpm network:fixture verify.
@@ -81,18 +81,13 @@ action.txt и derived events.tsv. Таблицы перечисляют observed
 - Provenance: fixtures/01-06/novel-local-exchange.provenance.md
 - Baseline: fixtures/01-06/novel-local-exchange.baseline.txt (`alpha:eth0`
   `UP LOWER_UP`, fixed MAC/IPv4, beta neighbor entry absent).
-- Canonical text: fixtures/01-06/novel-local-exchange.txt
 - Supplied assumption: both endpoints belong to one local Ethernet LAN.
 - Capture model: source namespace, ARP and IPv4/ICMP, six-frame ceiling.
 
-| frame | time_epoch | len | Ethernet src to dst | decoded fields |
-| ---: | ---: | ---: | --- | --- |
-| 1 | 1704068400.000000 | 42 | ...:0a to broadcast | ARP opcode 1, .10 to .20 |
-| 2 | 1704068400.000250 | 42 | ...:14 to ...:0a | ARP opcode 2, .20 to .10 |
-| 3 | 1704068400.000900 | 74 | ...:0a to ...:14 | IPv4 .10 to .20, ICMP type 8, id 25094, seq 7 |
-| 4 | 1704068400.001600 | 74 | ...:14 to ...:0a | IPv4 .20 to .10, ICMP type 0, id 25094, seq 7 |
-| 5 | 1704068400.005000 | 74 | ...:0a to ...:14 | IPv4 .10 to .20, ICMP type 8, id 25094, seq 8 |
-| 6 | 1704068400.005700 | 74 | ...:14 to ...:0a | IPv4 .20 to .10, ICMP type 0, id 25094, seq 8 |
+Target-specific normalized rows здесь намеренно не продублированы: их извлечение
+из versioned pcap через обязательный `pnpm network:fixture inspect` является
+частью задания 01-06. Catalog фиксирует identity, provenance и observation bound,
+но не служит готовым frame inventory.
 
 Catalog rows are normalized observations, not diagnostic conclusions. Captures
 do not expose endpoint process internals, route selection, gateway behaviour or

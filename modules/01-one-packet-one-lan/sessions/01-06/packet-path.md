@@ -26,7 +26,21 @@ TODO
 
 ## Frame inventory
 
-TODO: все frame numbers и применимые Ethernet/ARP/IPv4/ICMP fields.
+TODO: все frame numbers и применимые Ethernet/ARP/IPv4/ICMP fields, включая
+`icmp.ident` и `icmp.seq` для Echo frames.
+
+## Echo pair correlation
+
+TODO: перенесите observed значения из raw `inspect.txt` и заполните ровно по
+одной строке на каждый Echo frame. После строк объясните, почему frames 3→4 и
+5→6 образуют две разные request/reply пары.
+
+```text
+echo_frame=3 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
+echo_frame=4 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
+echo_frame=5 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
+echo_frame=6 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
+```
 
 ## Causal stages
 

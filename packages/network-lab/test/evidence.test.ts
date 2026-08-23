@@ -4,9 +4,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { validateNetworkEvidence } from "../src/evidence.js";
 
+const repository = path.resolve(import.meta.dirname, "../../..");
+
 describe("network evidence artifact contract", () => {
   it("fails every real TODO starter from 01-02 through 01-06", async () => {
-    const repository = path.resolve(import.meta.dirname, "../../..");
     for (const sessionId of ["01-02", "01-03", "01-04", "01-05", "01-06"]) {
       const result = await validateNetworkEvidence(
         path.join(
@@ -16,7 +17,8 @@ describe("network evidence artifact contract", () => {
           "sessions",
           sessionId
         ),
-        sessionId
+        sessionId,
+        repository
       );
       expect(result.ok, sessionId).toBe(false);
       expect(result.messages.join("\n"), sessionId).toContain("TODO");
@@ -108,7 +110,7 @@ describe("network evidence artifact contract", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "network-evidence-"));
     await mkdir(path.dirname(path.join(root, file)), { recursive: true });
     await writeFile(path.join(root, file), markdown);
-    const result = await validateNetworkEvidence(root, sessionId);
+    const result = await validateNetworkEvidence(root, sessionId, repository);
     expect(result, result.messages.join("\n")).toMatchObject({ ok: true });
   });
 
@@ -130,10 +132,151 @@ describe("network evidence artifact contract", () => {
         "2026-08-23T00:05:00Z before inspect"
       )
     );
-    const misordered = await validateNetworkEvidence(root, "01-06");
+    const misordered = await validateNetworkEvidence(root, "01-06", repository);
     expect(misordered.ok).toBe(false);
     expect(misordered.messages.join("\n")).toContain(
       "Expected timestamp должен быть раньше"
+    );
+  });
+
+  it.each([
+    [
+      "reply identifier",
+      "echo_frame=4",
+      "icmp.ident=25094",
+      "icmp.ident=99",
+      "icmp.ident"
+    ],
+    [
+      "reply sequence",
+      "echo_frame=4",
+      "icmp.seq=7",
+      "icmp.seq=99",
+      "icmp.seq"
+    ],
+    [
+      "Ethernet direction",
+      "echo_frame=4",
+      "eth.dst=02:42:ac:1e:00:0a",
+      "eth.dst=02:42:ac:1e:00:14",
+      "addresses"
+    ],
+    [
+      "IPv4 direction",
+      "echo_frame=4",
+      "ip.dst=172.30.0.10",
+      "ip.dst=172.30.0.20",
+      "addresses"
+    ]
+  ])(
+    "rejects 01-06 with a mismatched %s",
+    async (_case, frameMarker, from, to, message) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "network-evidence-"));
+      await writeFile(
+        path.join(root, "packet-path.md"),
+        replaceInEchoFrame(completedPacketPath(), frameMarker, from, to)
+      );
+
+      const result = await validateNetworkEvidence(root, "01-06", repository);
+
+      expect(result.ok).toBe(false);
+      expect(result.messages.join("\n")).toContain("pair=3-4");
+      expect(result.messages.join("\n")).toContain(message);
+    }
+  );
+
+  it("rejects 01-06 when two exchanges reuse the same sequence", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "network-evidence-"));
+    await writeFile(
+      path.join(root, "packet-path.md"),
+      replaceInEchoFrame(
+        replaceInEchoFrame(
+          completedPacketPath(),
+          "echo_frame=5",
+          "icmp.seq=8",
+          "icmp.seq=7"
+        ),
+        "echo_frame=6",
+        "icmp.seq=8",
+        "icmp.seq=7"
+      )
+    );
+
+    const result = await validateNetworkEvidence(root, "01-06", repository);
+
+    expect(result.ok).toBe(false);
+    expect(result.messages.join("\n")).toContain("должны различаться");
+  });
+
+  it("rejects 01-06 with invented but internally matching ICMP values", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "network-evidence-"));
+    const invented = completedPacketPath()
+      .replaceAll("icmp.ident=25094", "icmp.ident=1")
+      .replaceAll("icmp.seq=7", "icmp.seq=101")
+      .replaceAll("icmp.seq=8", "icmp.seq=102");
+    await writeFile(path.join(root, "packet-path.md"), invented);
+
+    const result = await validateNetworkEvidence(root, "01-06", repository);
+
+    expect(result.ok).toBe(false);
+    expect(result.messages.join("\n")).toContain("versioned fixture observation");
+  });
+
+  it("rejects 01-06 with a duplicate Echo frame row", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "network-evidence-"));
+    const row = completedPacketPath().match(/^echo_frame=3.*$/m)?.[0] ?? "";
+    await writeFile(
+      path.join(root, "packet-path.md"),
+      completedPacketPath().replace(row, `${row}\n${row}`)
+    );
+
+    const result = await validateNetworkEvidence(root, "01-06", repository);
+
+    expect(result.ok).toBe(false);
+    expect(result.messages.join("\n")).toContain(
+      "ровно одна Echo correlation row echo_frame=3"
+    );
+  });
+
+  it("rejects 01-06 with a duplicate Echo pair correlation section", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "network-evidence-"));
+    const duplicate = [
+      "## Echo pair correlation",
+      completedPacketPath().match(/^echo_frame=3.*$/m)?.[0] ?? ""
+    ].join("\n");
+    await writeFile(
+      path.join(root, "packet-path.md"),
+      completedPacketPath().replace(
+        "## Causal stages",
+        `${duplicate}\n\n## Causal stages`
+      )
+    );
+
+    const result = await validateNetworkEvidence(root, "01-06", repository);
+
+    expect(result.ok).toBe(false);
+    expect(result.messages.join("\n")).toContain(
+      "ровно одна section Echo pair correlation"
+    );
+  });
+
+  it("rejects 01-06 with a malformed Echo frame row", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "network-evidence-"));
+    await writeFile(
+      path.join(root, "packet-path.md"),
+      replaceInEchoFrame(
+        completedPacketPath(),
+        "echo_frame=6",
+        " icmp.type=0",
+        ""
+      )
+    );
+
+    const result = await validateNetworkEvidence(root, "01-06", repository);
+
+    expect(result.ok).toBe(false);
+    expect(result.messages.join("\n")).toContain(
+      "row echo_frame=6 должна содержать parseable"
     );
   });
 
@@ -343,6 +486,12 @@ Frame 4 records reverse IPv4 and ICMP fields.
 Frame 5 records the next IPv4 and ICMP fields.
 Frame 6 records their reverse IPv4 and ICMP fields.
 
+## Echo pair correlation
+echo_frame=3 eth.src=02:42:ac:1e:00:0a eth.dst=02:42:ac:1e:00:14 ip.src=172.30.0.10 ip.dst=172.30.0.20 icmp.type=8 icmp.ident=25094 icmp.seq=7
+echo_frame=4 eth.src=02:42:ac:1e:00:14 eth.dst=02:42:ac:1e:00:0a ip.src=172.30.0.20 ip.dst=172.30.0.10 icmp.type=0 icmp.ident=25094 icmp.seq=7
+echo_frame=5 eth.src=02:42:ac:1e:00:0a eth.dst=02:42:ac:1e:00:14 ip.src=172.30.0.10 ip.dst=172.30.0.20 icmp.type=8 icmp.ident=25094 icmp.seq=8
+echo_frame=6 eth.src=02:42:ac:1e:00:14 eth.dst=02:42:ac:1e:00:0a ip.src=172.30.0.20 ip.dst=172.30.0.10 icmp.type=0 icmp.ident=25094 icmp.seq=8
+
 ## Causal stages
 Each bounded stage arrow cites a numbered observation from the inventory.
 
@@ -366,4 +515,18 @@ The six records support only a bounded conclusion for this synthetic LAN.
 ## Cleanup status
 Cleanup ended at 2026-08-23T00:02:00Z with exact_container_absent=true, labelled_containers=0, labelled_networks=0 and labelled_volumes=0.
 `;
+}
+
+function replaceInEchoFrame(
+  markdown: string,
+  frameMarker: string,
+  from: string,
+  to: string
+): string {
+  return markdown
+    .split("\n")
+    .map((line) =>
+      line.startsWith(frameMarker) ? line.replace(from, to) : line
+    )
+    .join("\n");
 }
