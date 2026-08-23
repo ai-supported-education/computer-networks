@@ -8,8 +8,9 @@ assumptions без заранее заполненных диагнозов.
 ## Inspector run ledger
 
 TODO: для Case A/B/C — отдельный `.training/evidence/01-05/<run-id>/`,
-`action_at`, `cleanup_at`, ссылки на `preflight.txt`, `events.jsonl`, `inspect.txt`,
-`post-check.txt`, exact cleanup marker и labelled counts `0/0/0`.
+`inspect_action_at`, `cleanup_at`, ссылки на `preflight.txt`, `events.jsonl`,
+`inspect.txt`, `post-check.txt`, exact cleanup marker и labelled counts `0/0/0`.
+Не подставляйте сюда timestamp synthetic probe из fixture `action.txt`.
 
 ## Case A — interface-not-ready
 
@@ -35,7 +36,8 @@ TODO: минимум две.
 
 ### Next discriminating observation
 
-TODO: только предложите bounded read-only evidence, не запускайте новый probe.
+TODO: только предложите bounded read-only evidence, не запускайте новый probe;
+назовите competing hypotheses и разные ожидаемые результаты observation.
 
 ## Case B — arp-no-reply
 

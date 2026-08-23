@@ -66,18 +66,29 @@ describe("network evidence artifact contract", () => {
       path.join(root, "evidence", "baseline.md"),
       baseline("Expected was recorded at 2026-08-23T00:00:00Z before up.")
         .replace(
-          "The raw record contains interface eth0, flags UP and LOWER_UP, MAC and IPv4 fields for alpha.",
-          "The raw record contains interface eth0, flags UP and LOWER_UP twice: UP LOWER_UP, MAC and IPv4 fields for alpha."
+          "The raw record contains interface eth0, flags UP and LOWER_UP, MAC 02:42:ac:1e:00:0a and IPv4 172.30.0.10 for alpha.",
+          "The raw record contains interface eth0, flags UP and LOWER_UP twice: UP LOWER_UP, MAC 02:42:ac:1e:00:0a and IPv4 172.30.0.10 for alpha."
         )
         .replace(
-          "The raw record contains interface eth0, flags UP and LOWER_UP, MAC and IPv4 fields for beta.",
-          "The raw record contains interface eth0, MAC and IPv4 fields for beta."
+          "The raw record contains interface eth0, flags UP and LOWER_UP, MAC 02:42:ac:1e:00:14 and IPv4 172.30.0.20 for beta.",
+          "The raw record contains interface eth0, MAC 02:42:ac:1e:00:14 and IPv4 172.30.0.20 for beta."
         )
     );
     const flagsOnlyInAlpha = await validateNetworkEvidence(root, "01-02");
     expect(flagsOnlyInAlpha.ok).toBe(false);
     expect(flagsOnlyInAlpha.messages.join("\n")).toContain(
       "Observed beta должен отдельно содержать UP и LOWER_UP"
+    );
+
+    await writeFile(
+      path.join(root, "evidence", "baseline.md"),
+      baseline("Expected was recorded at 2026-08-23T00:00:00Z before up.")
+        .replace("IPv4 172.30.0.20", "IPv4 not-observed")
+    );
+    const missingBetaAddress = await validateNetworkEvidence(root, "01-02");
+    expect(missingBetaAddress.ok).toBe(false);
+    expect(missingBetaAddress.messages.join("\n")).toContain(
+      "Observed beta должен отдельно содержать eth0, MAC"
     );
   });
 
@@ -165,10 +176,10 @@ Observed data: .training/evidence/01-02/${runId}/preflight.json, .training/evide
 The normalized observation records internal=true and published_ports=0 with no added endpoint capabilities.
 
 ## Observed alpha
-The raw record contains interface eth0, flags UP and LOWER_UP, MAC and IPv4 fields for alpha.
+The raw record contains interface eth0, flags UP and LOWER_UP, MAC 02:42:ac:1e:00:0a and IPv4 172.30.0.10 for alpha.
 
 ## Observed beta
-The raw record contains interface eth0, flags UP and LOWER_UP, MAC and IPv4 fields for beta.
+The raw record contains interface eth0, flags UP and LOWER_UP, MAC 02:42:ac:1e:00:14 and IPv4 172.30.0.20 for beta.
 
 ## Inference and unknowns
 The inventory is consistent; behaviour outside this namespace remains unknown.
@@ -292,9 +303,9 @@ A bounded read-only observation is proposed without running another probe.
     "# Diagnosis\n\n" +
     "## Expected before inspector actions\nExpected bounded offline parsing was recorded at 2026-08-23T00:00:00Z before all inspect actions.\n\n" +
     "## Inspector run ledger\n" +
-    "- Case A action_at=2026-08-23T00:01:00Z cleanup_at=2026-08-23T00:01:10Z labelled=0/0/0 .training/evidence/01-05/run-a/preflight.txt .training/evidence/01-05/run-a/events.jsonl .training/evidence/01-05/run-a/inspect.txt .training/evidence/01-05/run-a/post-check.txt\n" +
-    "- Case B action_at=2026-08-23T00:02:00Z cleanup_at=2026-08-23T00:02:10Z labelled=0/0/0 .training/evidence/01-05/run-b/preflight.txt .training/evidence/01-05/run-b/events.jsonl .training/evidence/01-05/run-b/inspect.txt .training/evidence/01-05/run-b/post-check.txt\n" +
-    "- Case C action_at=2026-08-23T00:03:00Z cleanup_at=2026-08-23T00:03:10Z labelled=0/0/0 .training/evidence/01-05/run-c/preflight.txt .training/evidence/01-05/run-c/events.jsonl .training/evidence/01-05/run-c/inspect.txt .training/evidence/01-05/run-c/post-check.txt\n\n" +
+    "- Case A inspect_action_at=2026-08-23T00:01:00Z cleanup_at=2026-08-23T00:01:10Z labelled=0/0/0 .training/evidence/01-05/run-a/preflight.txt .training/evidence/01-05/run-a/events.jsonl .training/evidence/01-05/run-a/inspect.txt .training/evidence/01-05/run-a/post-check.txt\n" +
+    "- Case B inspect_action_at=2026-08-23T00:02:00Z cleanup_at=2026-08-23T00:02:10Z labelled=0/0/0 .training/evidence/01-05/run-b/preflight.txt .training/evidence/01-05/run-b/events.jsonl .training/evidence/01-05/run-b/inspect.txt .training/evidence/01-05/run-b/post-check.txt\n" +
+    "- Case C inspect_action_at=2026-08-23T00:03:00Z cleanup_at=2026-08-23T00:03:10Z labelled=0/0/0 .training/evidence/01-05/run-c/preflight.txt .training/evidence/01-05/run-c/events.jsonl .training/evidence/01-05/run-c/inspect.txt .training/evidence/01-05/run-c/post-check.txt\n\n" +
     section(
       "Case A - interface-not-ready",
       "fixtures/01-05/interface-not-ready/"

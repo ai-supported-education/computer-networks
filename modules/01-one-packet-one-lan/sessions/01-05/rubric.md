@@ -11,9 +11,12 @@
 - Last proven stage и earliest missing/disproven transition согласованы с causal
   ladder; ARP Request и matching Reply не слиты, а S5/S6 различают Ethernet, IPv4
   и ICMP evidence; более поздний симптом не подменяет первую границу.
+- S4 не выводится только из наличия ARP Reply: cited evidence показывает observed
+  neighbor mapping либо последующее использование advertised MAC при emission.
 - Bounded inference не объявляет конкретный root cause без различающего evidence.
 - Для каждого case сохранены минимум две правдоподобные unknowns и предложено одно
-  безопасное следующее наблюдение.
+  безопасное следующее наблюдение, для которого указаны competing hypotheses и
+  разные ожидаемые результаты.
 - Cross-case comparison объясняет, почему общий «ping failed» недостаточен.
 - Отсутствие формулируется как «не наблюдалось» в bounded capture; emission не
   объявляется фактом без отдельного evidence.

@@ -2,8 +2,9 @@
 
 ## Expected before action
 
-TODO: ISO UTC timestamp до `inspect`, ожидаемые identity/frame-count/safety свойства
-из provenance и исходные assumptions.
+TODO: ISO UTC timestamp до `inspect`; отдельно fixture path/hash/synthetic
+origin/frame count из provenance и ожидаемые runtime guardrails из inspector
+contract (`network=none`, capabilities, mounts/ports, limits, cleanup).
 
 ## Inspector action and raw evidence
 

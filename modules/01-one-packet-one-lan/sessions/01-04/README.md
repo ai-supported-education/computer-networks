@@ -134,7 +134,9 @@ interface/filter.
    Команда принимает PASS только когда cold capture содержит ordered matching
    ARP exchange, где reply фактически рекламирует MAC beta, и Echo Request/Reply;
    warm neighbor-before содержит expected IPv4-to-MAC mapping, а Echo Reply
-   совпадает со своим Request по observed identifier/sequence.
+   совпадает со своим Request по observed identifier/sequence; target ARP до
+   первого warm Echo Request отсутствует. Target ARP после первого Echo допустим
+   и не меняет уже доказанный warm order.
    Identifier/sequence должны совпасть внутри пары, но их конкретное числовое
    значение не фиксируется между phases. Capture сначала
    пишется в exact labelled volume, затем `docker cp` создаёт host artifact от
@@ -199,6 +201,8 @@ interface/filter.
 - [ ] Matching Echo pairs доказаны observed identifier/sequence внутри каждой phase.
 - [ ] Cold ARP Reply рекламирует observed MAC beta; Ethernet directions Echo
       совпадают с fixed inventory.
+- [ ] Warm neighbor-before содержит expected mapping, а до первого warm Echo
+      Request нет target ARP; более поздний ARP не считается нарушением.
 - [ ] `helpers/*.json` подтверждают runtime identity и минимальные safety/resource
       guardrails всех capture/probe/neighbor helpers.
 - [ ] Raw post-check того же run подтверждает ноль labelled containers, networks
