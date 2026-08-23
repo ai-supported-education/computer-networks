@@ -6,7 +6,7 @@
     },
     {
       "title": "Читайте bundle в фиксированном порядке",
-      "body": "Сначала provenance/hash и baseline, затем synthetic action/window/filter, потом events. В Inspector run ledger свяжите A/B/C с тремя разными raw run paths и их inspect_action_at/cleanup_at; первый timestamp берётся из текущего inspector events.jsonl, а не из fixture action.txt. Global Expected должен быть раньше каждого inspect action."
+      "body": "Сначала provenance/hash и baseline, затем synthetic action/window/filter, потом events. В Inspector run ledger свяжите A/B/C с тремя разными raw run paths и их inspect_action_at/cleanup_at; первый timestamp берётся из текущего inspector events.jsonl, а не из fixture action.txt. Global Expected должен быть раньше каждого inspect action и описывать только три verified identities, три network-none runs, четыре raw artifacts и cleanup — без protocol fields или diagnoses."
     },
     {
       "title": "Проверьте три разные границы",

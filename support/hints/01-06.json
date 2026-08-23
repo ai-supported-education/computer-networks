@@ -10,7 +10,7 @@
     },
     {
       "title": "Проверка полноты отчёта",
-      "body": "Свяжите один run: preflight/events/inspect/post-check, verified pcap и baseline companion. Покройте ARP request/reply, две ICMP пары, exact citations, минимум три unknowns и counterfactual, меняющий evidence. Завершите exact_container_absent=true и labelled 0/0/0; при failure используйте только напечатанный run-directory recovery."
+      "body": "Свяжите один run: preflight/events/inspect/post-check, verified pcap и baseline companion. Для Echo frames 3–6 заполните четыре echo_frame rows с exact eth.src/dst, ip.src/dst, icmp.type/ident/seq. Внутри 3→4 и 5→6 ident+seq совпадают, Ethernet/IPv4 directions разворачиваются, а sequence различает exchanges. Добавьте exact citations, минимум три unknowns и counterfactual. Завершите exact_container_absent=true и labelled 0/0/0; при failure используйте только напечатанный run-directory recovery."
     }
   ]
 }

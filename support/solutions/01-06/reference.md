@@ -17,6 +17,19 @@ Observed sequence:
 4. Frames 5/6: the same directions and message types, sequence `8`, without a new
    preceding ARP pair inside the capture.
 
+Обязательные correlation rows имеют вид:
+
+```text
+echo_frame=3 eth.src=02:42:ac:1e:00:0a eth.dst=02:42:ac:1e:00:14 ip.src=172.30.0.10 ip.dst=172.30.0.20 icmp.type=8 icmp.ident=25094 icmp.seq=7
+echo_frame=4 eth.src=02:42:ac:1e:00:14 eth.dst=02:42:ac:1e:00:0a ip.src=172.30.0.20 ip.dst=172.30.0.10 icmp.type=0 icmp.ident=25094 icmp.seq=7
+echo_frame=5 eth.src=02:42:ac:1e:00:0a eth.dst=02:42:ac:1e:00:14 ip.src=172.30.0.10 ip.dst=172.30.0.20 icmp.type=8 icmp.ident=25094 icmp.seq=8
+echo_frame=6 eth.src=02:42:ac:1e:00:14 eth.dst=02:42:ac:1e:00:0a ip.src=172.30.0.20 ip.dst=172.30.0.10 icmp.type=0 icmp.ident=25094 icmp.seq=8
+```
+
+В pair 3→4 и 5→6 совпадают `icmp.ident`/`icmp.seq`, а Ethernet и IPv4
+source/destination разворачиваются. Две пары различаются observed sequence;
+порядок frames без этих fields не доказывает correlation.
+
 Source facts: endpoint inventory, synthetic origin, capture point/filter/bounds.
 Assumption: supplied statement that both endpoints are in one local Ethernet LAN.
 Observations: the six extracted rows. Inference: the sequence is consistent with

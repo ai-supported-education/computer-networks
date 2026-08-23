@@ -7,7 +7,13 @@
 `preflight.txt`, `events.jsonl`, `inspect.txt`, `post-check.txt`; для каждого
 `inspect_action_at < cleanup_at`, `exact_container_absent=true` и labelled
 `0/0/0`. `inspect_action_at` берётся из inspector `events.jsonl`, а не из
-synthetic fixture `action.txt`.
+synthetic fixture `action.txt`. Expected заранее описывает только три verified
+identities, три network-none runs, четыре raw artifacts и clean post-check;
+protocol events, target fields и diagnoses до inspect остаются unknown.
+
+Каждый case должен отдельно цитировать `baseline.txt`, `action.txt` и
+`events.tsv`; для empty capture дополнительно нужна bounded metadata, которая
+доказывает capture point/window/filter и нулевое число records.
 
 ## interface-not-ready
 
