@@ -18,6 +18,8 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
     {
       relativePath: "evidence/baseline.md",
       headings: [
+        /source facts/i,
+        /assumptions before action/i,
         /expected before action/i,
         /initial state and preflight/i,
         /action start/i,
@@ -82,6 +84,8 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
     {
       relativePath: "frame-map.md",
       headings: [
+        /source facts/i,
+        /assumptions before action/i,
         /expected before action/i,
         /inspector action and raw evidence/i,
         /fixture identity/i,
@@ -137,6 +141,8 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
     {
       relativePath: "evidence/comparison.md",
       headings: [
+        /source facts/i,
+        /assumptions before action/i,
         /expected before action/i,
         /cold prediction/i,
         /warm prediction/i,
@@ -215,6 +221,8 @@ const RULES: Readonly<Record<string, readonly ArtifactRule[]>> = {
     {
       relativePath: "diagnosis.md",
       headings: [
+        /source facts/i,
+        /assumptions before inspector actions/i,
         /expected before inspector actions/i,
         /inspector run ledger/i,
         /case a.+interface-not-ready/i,

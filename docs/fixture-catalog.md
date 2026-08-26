@@ -1,22 +1,24 @@
-# Catalog of synthetic packet fixtures
+# Каталог искусственных наборов сетевых пакетов
 
-Этот каталог является learner-visible inventory для binary fixtures.
-Все пакеты собраны детерминированным генератором
-packages/network-lab/src/fixtures.ts и не содержат host, user или external
-traffic. Canonical identity проверяется командой pnpm network:fixture verify.
+Этот каталог доступен учащемуся и перечисляет бинарные учебные наборы. Все пакеты
+собраны детерминированным генератором
+`packages/network-lab/src/fixtures.ts` и не содержат трафик хоста, пользователя
+или внешней сети. Путь и SHA-256 набора проверяет команда
+`pnpm network:fixture verify`.
 
-## Общий inventory
+## Общие исходные данные
 
 | Endpoint | IPv4 | MAC |
 | --- | --- | --- |
 | alpha / source | 172.30.0.10 | 02:42:ac:1e:00:0a |
 | beta / destination | 172.30.0.20 | 02:42:ac:1e:00:14 |
 
-Binary format: classic pcap v2.4, little-endian, microsecond timestamps,
-Ethernet link type, snaplen 65535. Ethernet FCS не записан. Addresses, payload,
-fixture timestamps, identifiers, checksums и frame order детерминированы внутри
-versioned fixtures. В live capture timestamps, IP/ICMP identifiers и checksums
-могут меняться и не являются invariant.
+Формат файлов: classic pcap v2.4, порядок байтов little-endian, отметки времени с
+точностью до микросекунд, тип канала Ethernet, `snaplen=65535`. Контрольная сумма
+кадра Ethernet (FCS) не записана. Адреса, payload, отметки времени, идентификаторы,
+checksums и порядок кадров фиксированы внутри версионируемых учебных наборов. В
+живом захвате отметки времени, IP/ICMP identifiers и checksums могут меняться,
+поэтому их нельзя использовать как неизменный эталон.
 
 ## 01-03 known-neighbour
 
@@ -33,9 +35,11 @@ versioned fixtures. В live capture timestamps, IP/ICMP identifiers и checksums
 
 ## 01-05 evidence bundles
 
-Каждый bundle содержит capture.pcap, sha256.txt, provenance.md, baseline.txt,
-action.txt и derived events.tsv. Таблицы перечисляют observed records и bounds,
-но не назначают root cause.
+Каждый набор содержит `capture.pcap`, `sha256.txt`, `provenance.md`,
+`baseline.txt`, `action.txt` и полученный из захвата `events.tsv`. Таблицы ниже
+фиксируют заявления каталога о записях и границах наблюдения, но не назначают
+первопричину. До воспроизведения через `inspect` это исходные данные (`Source
+facts`), а не наблюдения учащегося (`Observed`).
 
 ### interface-not-ready
 
@@ -89,6 +93,6 @@ Target-specific normalized rows здесь намеренно не продуб�
 частью задания 01-06. Catalog фиксирует identity, provenance и observation bound,
 но не служит готовым frame inventory.
 
-Catalog rows are normalized observations, not diagnostic conclusions. Captures
-do not expose endpoint process internals, route selection, gateway behaviour or
-traffic outside their stated observation window.
+Строки каталога описывают нормализованные записи, но не являются диагностическими
+выводами. Захваты не показывают внутреннюю работу процессов на узлах, выбор
+маршрута, поведение gateway или трафик за пределами указанного окна наблюдения.

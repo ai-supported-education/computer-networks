@@ -2,6 +2,9 @@
 
 ## Invariants для PASS
 
+- Source facts процитированы из learner-facing контракта или версионируемой
+  конфигурации; assumptions перечислены отдельно либо явно обосновано их
+  отсутствие. Ни source fact, ни assumption не выданы за observation.
 - Expected имеет ISO 8601 UTC timestamp и явно записан до action start; action и
   cleanup timestamps взяты из соответствующих raw events.
 - Saved preflight того же run подтверждает effective local `unix://` endpoint,
@@ -12,7 +15,7 @@
   endpoints, отсутствие published ports, mounts и added endpoint capabilities.
 - Для обоих endpoints cited raw evidence содержит interface, link state, MAC и
   IPv4; summary не подменяет отсутствующие значения ожиданиями.
-- Inference следует только из cited source facts/observations, не объявляет
+- Inference следует только из cited source facts и observations, не объявляет
   packet delivery доказанной и явно сохраняет свойства вне baseline как unknown.
 - Raw run directory уникален и не перезаписывает предыдущую попытку.
 - Raw post-check того же run выполнен после cleanup и показывает ноль labelled

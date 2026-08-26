@@ -2,6 +2,9 @@
 
 ## Invariants для PASS
 
+- Source facts процитированы из versioned provenance; assumptions перечислены
+  отдельно либо их отсутствие явно обосновано; Expected не выдаётся за
+  observation.
 - Указанный observed SHA-256 совпадает с versioned provenance.
 - Expected записан до `inspect`; один unique raw run содержит `preflight.txt`,
   `events.jsonl`, `inspect.txt` и `post-check.txt`, а timestamps упорядочены.

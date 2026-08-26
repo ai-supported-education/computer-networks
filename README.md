@@ -1,48 +1,53 @@
 # Компьютерные сети: от пакета к диагностике
 
-Практический IPv4-only курс для разработчика, который пользуется Git, shell и
-Docker, но ещё не имеет единой системной модели сетевого пути.
+Приложение не подключается к базе, контейнер не видит соседний сервис, а `curl`
+возвращает timeout. В такой момент легко начать перебирать знакомые команды —
+проверить DNS, перезапустить Docker, выключить firewall — и всё равно не понимать,
+на каком участке пути исчез запрос.
 
-Курс идёт от одного synthetic packet exchange внутри одной LAN к production
-request path через switching, routing, UDP/TCP, DNS, firewall/NAT, TLS, reverse
-proxy и Docker. Финальный навык — не вспомнить случайную команду, а выбрать
-минимальную различающую проверку, локализовать failure и доказать recovery
-сохранённым evidence.
+Этот курс поможет собрать путь запроса в одну причинную модель. Мы начнём с
+одного `ping` между двумя узлами локальной сети и постепенно дойдём до DNS,
+UDP/TCP, firewall и NAT, TLS, reverse proxy и сетей Docker. На каждом шаге вы
+будете не просто читать схему, а получать наблюдение, отделять его от
+предположения и выбирать следующую проверку.
 
-Подробная модель учащегося, language policy и границы v1 зафиксированы в
+Курс рассчитан на разработчика, который уже пользуется Git, командной оболочкой
+и Docker, но пока не изучал сети системно. В конце вам не придётся вспоминать
+случайную «диагностическую» команду: вы сможете локализовать сбой и подтвердить
+восстановление сохранёнными доказательствами.
+
+Подробное описание аудитории, правила языка и границы v1 зафиксированы в
 [audience](curriculum/audience.md). Требования к macOS/Linux, arm64/amd64,
-Docker/Linux labs, packet captures и cleanup находятся в
+лабораториям Docker/Linux, захватам пакетов и очистке ресурсов находятся в
 [lab environment](curriculum/lab-environment.md).
 
 ## Маршрут
 
-Canonical order и concept graph находятся в [course.json](curriculum/course.json).
-Маршрут состоит из 71 independently finishable session по 35–55 минут:
+Порядок тем и связи между ними находятся в [course.json](curriculum/course.json).
+Маршрут состоит из 71 самостоятельной карточки по 35–55 минут:
 
-1. Один packet в одной LAN — 6 sessions.
-2. IPv4, CIDR и route choice — 7.
-3. Switching, VLAN и DHCP — 6.
-4. Routing, ICMP и MTU — 7.
+1. Один пакет в одной LAN — 6 карточек.
+2. IPv4, CIDR и выбор маршрута — 7.
+3. Коммутация, VLAN и DHCP — 6.
+4. Маршрутизация, ICMP и MTU — 7.
 5. UDP и TCP — 8.
 6. DNS — 6.
-7. NAT и firewall — 7.
-8. HTTP, TLS и proxy — 7.
-9. Docker networking — 6.
-10. Diagnosis и performance — 6.
-11. Capstone — 5.
+7. NAT и межсетевой экран — 7.
+8. HTTP, TLS и прокси — 7.
+9. Сети Docker — 6.
+10. Диагностика и производительность — 6.
+11. Итоговый проект — 5.
 
-Nominal time — 3525 минут, около 58 часов 45 минут; полный проход с повторными
-runs и review рассчитан примерно на 59–65 часов.
+Расчётное время — 3525 минут, около 58 часов 45 минут; полный проход с повторными
+запусками и проверками рассчитан примерно на 59–65 часов.
 
-Первые шесть sessions образуют один published authoring prefix. Остальные entries
-имеют releaseStatus planned: они фиксируют outcome и зависимости, но runner не
-выдаёт их как готовый learner material. Published status в feature branch ещё не
-означает публичную готовность: каждая карточка и весь module должны получить
-актуальный independent content-review PASS.
+Первые шесть карточек образуют опубликованную первую главу. Остальные записи имеют
+`releaseStatus: planned`: они фиксируют будущий результат и зависимости, но
+тренажёр пока не выдаёт их как готовый материал.
 
 ## Как проходить
 
-После установки dependencies:
+После установки зависимостей:
 
     pnpm session:validate
     pnpm session:next
@@ -54,47 +59,55 @@ runs и review рассчитан примерно на 59–65 часов.
     pnpm session:review
     pnpm session:finish
 
-Session начинается и заканчивается green/safe state, создаёт named evidence и не
-оставляет обязательного хвоста. Runner хранит personal progress локально и не
-применяет solution. Progressive hints выдаются по одному командой
-pnpm session:hint; quiz keys, hints и reference solutions не находятся в default
-branch.
+Каждая карточка начинается и заканчивается в чистом безопасном состоянии, создаёт
+явно названное доказательство и не оставляет обязательного хвоста. Тренажёр хранит
+личный прогресс локально и не применяет готовое решение. Подсказки открываются по
+одной командой `pnpm session:hint`; ключи квизов, подсказки и эталонные решения не
+находятся в основной ветке.
 
 ## Практика и безопасность
 
-Обязательные labs запускаются в synthetic Docker/Linux topologies. Default scope
-не включает Internet targets, host networking, Docker socket, privileged
-containers, реальные credentials или пользовательский traffic. Packet evidence
-имеет bounded capture contract, provenance, SHA-256 и текстовый tshark companion.
-Каждое изменение начинается с preflight/baseline и заканчивается cleanup плюс
-post-check.
+Обязательные лабораторные работы запускаются в искусственных топологиях
+Docker/Linux. Они не обращаются к произвольным адресам в интернете, не используют
+host networking, Docker socket, privileged-контейнеры, реальные учётные данные
+или пользовательский трафик. Для каждого захвата пакетов заданы ограничения по
+времени и объёму, происхождение данных, SHA-256 и текстовое представление TShark.
+Каждое изменение начинается с предварительной проверки и исходного состояния, а
+заканчивается удалением ресурсов и проверкой результата.
 
-Курс vendor-neutral. MikroTik и RouterOS находятся вне scope: материал не содержит
-RouterOS commands, не подключается к домашнему или production router и не меняет
-его configuration.
+Курс не привязан к конкретному производителю. MikroTik и RouterOS находятся за
+его границами: материал не содержит команд RouterOS, не подключается к домашнему
+или рабочему маршрутизатору и не меняет его конфигурацию.
 
 ## Ограничение IPv4-only
 
-Изучаемое поведение не является универсальным свойством любого IP traffic. В v1
-не входят IPv6, Neighbor Discovery, SLAAC и dual-stack selection; ARP, broadcast,
-IPv4 fragmentation и address semantics нельзя переносить на IPv6 по аналогии.
+Изучаемое поведение не является универсальным свойством любого IP-трафика. В v1
+не входят IPv6, Neighbor Discovery, SLAAC и выбор в dual-stack-среде; ARP,
+broadcast, фрагментацию IPv4 и смысл адресов нельзя переносить на IPv6 по аналогии.
 
-Также вне v1 находятся Wi-Fi/RF, OSPF/BGP, VPN/tunnels, Kubernetes/CNI, service
-mesh, vendor-specific cloud networking, QUIC/HTTP/3 и offensive/disruptive
-testing. Эти темы перечислены как course exclusions, а не как session defers:
-manifest разрешает defer только concept, который действительно вводится позже.
+Также вне v1 находятся Wi-Fi/RF, OSPF/BGP, VPN и туннели, Kubernetes/CNI, service
+mesh, облачные сети конкретных производителей, QUIC/HTTP/3 и разрушающее либо
+атакующее тестирование. Это исключения из курса, а не обещания раскрыть тему в
+следующей карточке: manifest разрешает отложить только понятие, которое
+действительно вводится позже.
 
-## Authoring и review
+## Для авторов курса (не часть прохождения)
 
 Правила материала задают [authoring standard](curriculum/authoring-standard.md),
-[session contract](curriculum/session-contract.md) и profiles lab, quantitative,
-network-safety, networking.
+[session contract](curriculum/session-contract.md) и профили `lab`,
+`quantitative`, `network-safety`, `networking`.
 
-После создания или существенного изменения learner-facing session:
+После создания или существенного изменения карточки для учащегося:
 
     pnpm author:content-review session <id>
     pnpm author:content-review module <module-id>
 
-Fresh reviewer сначала читает blind learner packet, затем проверяет concept graph,
-profiles, rubric, checks/evidence и соседние карточки. Никакая expected строка в
-README не считается observed result учащегося.
+Новый проверяющий проходит материал в три этапа. Сначала он видит только реальный
+маршрут учащегося и отдельно фиксирует качество входа и языка. Затем восстанавливает
+модель без авторских пояснений и лишь после этого сверяет связи понятий, профили,
+rubric, проверки, доказательства и соседние карточки. Ни одна ожидаемая строка в
+README не считается фактическим результатом учащегося.
+
+Статус `published` в рабочей ветке ещё не означает публичную готовность: каждая
+карточка и вся глава должны получить актуальный независимый
+`content-review PASS`.

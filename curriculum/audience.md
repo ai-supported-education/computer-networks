@@ -3,82 +3,92 @@
 ## Для кого этот курс
 
 Курс рассчитан на практикующего разработчика, который уверенно работает с Git,
-shell, Docker и Docker Compose, умеет запускать процессы, читать logs и менять
-текстовую configuration. Предыдущая системная модель компьютерных сетей не
-предполагается.
+командной оболочкой, Docker и Docker Compose, умеет запускать процессы, читать
+журналы и менять текстовую конфигурацию. Предыдущая системная модель компьютерных
+сетей не предполагается.
 
 До начала достаточно уметь:
 
-- выполнить и повторить shell-команду из указанной directory;
+- выполнить и повторить команду из указанной директории;
 - прочитать небольшой JSON, YAML или Markdown-файл;
-- запустить и остановить Docker container или Compose project;
-- сохранить изменение в Git checkpoint;
-- выполнить целочисленное вычисление с явно указанными units.
+- запустить и остановить контейнер Docker или проект Compose;
+- сохранить изменение в контрольной точке Git;
+- выполнить целочисленное вычисление с явно указанными единицами.
 
-Не считаются входными знаниями Ethernet, MAC addressing, ARP, IPv4 prefixes,
-routing, transport ports, sockets, UDP, TCP, DNS, NAT, firewall, HTTP, TLS,
-packet capture или Wireshark.
+Не считаются входными знаниями Ethernet, MAC-адресация, ARP, префиксы IPv4,
+маршрутизация, транспортные порты, сокеты, UDP, TCP, DNS, NAT, firewall, HTTP,
+TLS, захват пакетов или Wireshark.
 
 ## Проверяемый финал
 
-После v1 учащийся может проследить один IPv4 application request от interface и
-Ethernet frame до process, DNS, TCP, TLS, HTTP и reverse proxy, выбрать
-минимальную различающую проверку для конкурирующих hypotheses, локализовать
-неисправность и доказать recovery сохранённым evidence.
+После v1 учащийся может проследить один IPv4-запрос приложения от сетевого
+интерфейса и кадра Ethernet до процесса, DNS, TCP, TLS, HTTP и reverse proxy,
+выбрать минимальную проверку, различающую конкурирующие гипотезы, локализовать
+неисправность и доказать восстановление сохранёнными данными.
 
 Итог не требует запоминать набор команд. Учащийся должен объяснить, какое решение
-принимает каждый компонент, какое сообщение наблюдается, что было expected до
-действия, что действительно observed и почему inference не шире evidence.
+принимает каждый компонент, какое сообщение наблюдается, чего он ожидал до
+действия, что увидел на самом деле и почему вывод не шире доказательств.
 
 ## Язык и термины
 
-Объяснения, задания и rubric пишутся по-русски. Имена protocol, packet fields,
-states, standards, CLI-команды и их flags сохраняются на English: Ethernet,
-IPv4, ARP, ICMP, CIDR, route lookup, UDP, TCP, DNS, NAT, TLS, HTTP, tcpdump,
-tshark, ip, ss и curl.
+Объяснения, задания и rubric пишутся по-русски. Точные имена протоколов, полей
+пакета, состояний, стандартов, CLI-команд и их флагов сохраняются на английском:
+Ethernet, IPv4, ARP, ICMP, CIDR, route lookup, UDP, TCP, DNS, NAT, TLS, HTTP,
+`tcpdump`, `tshark`, `ip`, `ss` и `curl`.
 
-Слово packet допустимо как общее обозначение только там, где точный protocol
-data unit ещё не важен. При разборе evidence материал различает Ethernet frame,
-IPv4 datagram, UDP datagram, TCP segment и application message.
+Термин появляется после знакомой ситуации или наблюдаемого примера и при первом
+упоминании получает короткое объяснение обычными словами. Английское название
+не должно заменять русскую связную речь: мы пишем «сетевой интерфейс», «кадр
+Ethernet», «исходное состояние» и «доказательство», если не ссылаемся на точное
+имя поля, команды или состояния. Текст ведёт учащегося от вопроса к модели, а не
+начинается с перечня определений без контекста.
+
+Слово «пакет» допустимо как общее обозначение только там, где точная единица
+протокола ещё не важна. При разборе доказательств материал различает кадр
+Ethernet, датаграмму IPv4, датаграмму UDP, сегмент TCP и сообщение приложения.
 
 ## Scope v1
 
-v1 строит production foundation для application developer и использует только
+v1 создаёт практическую основу для разработчика приложений и использует только
 IPv4. В обязательный маршрут входят:
 
-- interface, Ethernet, MAC, ARP и packet evidence в одной LAN;
-- IPv4 addressing, CIDR, local/remote choice, switching, VLAN и DHCP;
+- сетевой интерфейс, Ethernet, MAC, ARP и доказательства из захвата в одной LAN;
+- адресация IPv4, CIDR, выбор локального или удалённого пути, switching, VLAN и
+  DHCP;
 - routing, ICMP, MTU, fragmentation и PMTUD;
-- ports, sockets, UDP, TCP и их диагностические signatures;
-- DNS resolution и system resolver behavior;
-- Linux packet path, stateful firewall, conntrack, DNAT и SNAT;
-- HTTP, TLS, reverse proxy, load balancing и health checks;
+- порты, сокеты, UDP, TCP и их диагностические признаки;
+- разрешение имён DNS и поведение системного resolver;
+- путь пакета в Linux, stateful firewall, conntrack, DNAT и SNAT;
+- HTTP, TLS, reverse proxy, балансировка нагрузки и health checks;
 - Docker networking на macOS и Linux;
-- layered diagnosis, latency, throughput, loss, queues, timeouts и retries;
-- capstone с deterministic fault, evidence-based recovery и runbook.
+- послойная диагностика, latency, throughput, потери, очереди, timeouts и retries;
+- итоговый проект с детерминированной неисправностью, доказанным восстановлением
+  и runbook.
 
 IPv4-only — явное ограничение модели, а не утверждение об универсальном поведении
-IP networks. Материал не переносит ARP, broadcast, fragmentation или address
-semantics на IPv6.
+IP-сетей. Материал не переносит ARP, broadcast, фрагментацию или смысл адресов на
+IPv6.
 
 ## Не входит в v1
 
 - IPv6, Neighbor Discovery, SLAAC и dual-stack selection;
-- Wi-Fi/RF, STP, LACP и сложный campus switching;
+- Wi-Fi/RF, STP, LACP и сложная коммутация кампусных сетей;
 - OSPF, BGP и другое dynamic routing;
-- VPN, tunnels, Kubernetes/CNI, service mesh и vendor-specific cloud networking;
+- VPN, туннели, Kubernetes/CNI, service mesh и облачные сети конкретных
+  производителей;
 - QUIC/HTTP/3 и глубокая настройка congestion-control algorithms;
-- active scanning чужих systems, interception, spoofing, access-control bypass
-  или disruptive testing;
-- настройка production routers и switches.
+- активное сканирование чужих систем, перехват, spoofing, обход контроля доступа
+  или разрушающее тестирование;
+- настройка рабочих маршрутизаторов и коммутаторов.
 
-MikroTik и RouterOS не являются target, prerequisite или скрытым продолжением
-курса. Учащийся сможет позже переносить причинную модель на принадлежащее ему
-оборудование, но v1 не содержит RouterOS-команд, не подключается к MikroTik и не
-меняет его configuration.
+MikroTik и RouterOS не являются целью, предварительным требованием или скрытым
+продолжением курса. Учащийся сможет позже переносить причинную модель на принадлежащее ему
+оборудование, но v1 не содержит команд RouterOS, не подключается к MikroTik и не
+меняет его конфигурацию.
 
 ## Учебная среда
 
-Все обязательные observations и изменения происходят в synthetic Docker/Linux
-topologies согласно [контракту лаборатории](lab-environment.md). Реальный домашний
-или production traffic не нужен и не должен попадать в course evidence.
+Все обязательные наблюдения и изменения происходят в искусственных топологиях
+Docker/Linux согласно [контракту лаборатории](lab-environment.md). Реальный
+домашний или рабочий трафик не нужен и не должен попадать в доказательства курса.

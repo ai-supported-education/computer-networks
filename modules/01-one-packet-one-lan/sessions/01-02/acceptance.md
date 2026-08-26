@@ -6,6 +6,8 @@
 `network-evidence` проверяет два regular non-symlink Markdown artifacts:
 
 - starter с любым оставшимся TODO получает FAIL;
+- отсутствующие или пустые `Source facts` и `Assumptions before action` получают
+  FAIL;
 - отсутствующий обязательный heading или raw filename получает FAIL;
 - Expected timestamp не раньше Action start получает FAIL;
 - cleanup timestamp не позже Action start получает FAIL;

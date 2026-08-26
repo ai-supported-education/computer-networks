@@ -1,7 +1,7 @@
 {
   "version": 1,
   "language": "ru",
-  "audience": "Практикующий разработчик с Git, shell, Docker и Docker Compose, но без предполагаемой системной модели Ethernet, IPv4, routing, transport protocols, DNS, NAT, TLS или packet analysis.",
+  "audience": "Практикующий разработчик, который уверенно пользуется Git, командной строкой, Docker и Docker Compose, но пока не строил системную модель Ethernet, IPv4, маршрутизации, транспортных протоколов, DNS, NAT, TLS и анализа сетевого трафика.",
   "profiles": [
     "lab",
     "quantitative",
@@ -38,17 +38,17 @@
     {
       "id": "01",
       "slug": "one-packet-one-lan",
-      "title": "Один packet в одной LAN",
-      "goal": "Научиться читать и объяснять bounded packet evidence внутри заранее заданной LAN без скрытых CIDR, route lookup или switching prerequisites.",
+      "title": "Один пакет в одной LAN",
+      "goal": "Научиться читать ограниченный набор доказательств одного обмена внутри заранее подготовленной LAN и объяснять его без скрытых требований к CIDR, выбору маршрута или коммутации.",
       "sessions": [
         {
           "id": "01-01",
           "releaseStatus": "published",
-          "title": "Различить interface, адреса и вложенные сообщения",
+          "title": "Различить интерфейс, адреса и вложенные сообщения",
           "minutes": 40,
           "kind": "observe",
-          "outcome": "Учащийся различает interface, source/destination MAC, source/destination IPv4, Ethernet frame, IPv4 datagram и ICMP message и восстанавливает их encapsulation.",
-          "done": "Во всех quiz scenarios заполнены answers и собственные reasons; interface, MAC, IPv4, frame, datagram и ICMP не смешаны; направление encapsulation и decapsulation объяснено причинно; quiz и agent review пройдены.",
+          "outcome": "Учащийся различает сетевой интерфейс, MAC- и IPv4-адреса, кадр Ethernet, IPv4-датаграмму и сообщение ICMP, а затем восстанавливает порядок вложения при отправке и чтения при приёме.",
+          "done": "Во всех сценариях квиза записаны ответы и собственные объяснения; интерфейс, адреса и вложенные сообщения не смешаны; порядок отправки и приёма объяснён причинно; quiz и agent review пройдены.",
           "checks": [
             "quiz",
             "review"
@@ -85,11 +85,11 @@
         {
           "id": "01-02",
           "releaseStatus": "published",
-          "title": "Доказать baseline изолированной LAN",
+          "title": "Подтвердить исходное состояние изолированной LAN",
           "minutes": 45,
           "kind": "configure",
-          "outcome": "Учащийся запускает разрешённую isolated Docker LAN, сохраняет baseline interfaces, MAC, IPv4 и link state, затем доказывает полный teardown.",
-          "done": "Saved run-scoped preflight подтверждает local Docker unix endpoint, отсутствие subnet conflicts, нулевое initial state, exact labelled targets, Docker Engine/server architecture и pinned image; topology inspect доказывает isolation/exposure/capability invariants; evidence/baseline.md содержит observed interfaces, MAC, IPv4 и UP/LOWER_UP link state; raw post-check того же run подтверждает teardown без затрагивания чужих Docker resources; network-evidence и agent review пройдены.",
+          "outcome": "Учащийся запускает разрешённую изолированную LAN в Docker, сохраняет исходное состояние интерфейсов, MAC-, IPv4-адресов и канала, а затем доказывает полное удаление ресурсов.",
+          "done": "Для одного именованного запуска сохранены preflight, наблюдаемые интерфейсы, адреса и состояние канала, а post-check подтверждает удаление только ресурсов лаборатории; network-evidence и agent review пройдены.",
           "checks": [
             "network-evidence",
             "review"
@@ -131,11 +131,11 @@
         {
           "id": "01-03",
           "releaseStatus": "published",
-          "title": "Разобрать synthetic capture по полям",
+          "title": "Разобрать поля сохранённого захвата",
           "minutes": 45,
           "kind": "observe",
-          "outcome": "Учащийся воспроизводимо извлекает tshark fields из deterministic pcap и строит frame-map Ethernet → IPv4 → ICMP.",
-          "done": "Fixture provenance и SHA-256 зафиксированы; tshark command и normalized fields воспроизводимы; frame-map.md связывает фактические Ethernet, IPv4 и ICMP fields с protocol boundaries и проверяемой length arithmetic; observations, inference и unknowns разделены; network-evidence и review пройдены.",
+          "outcome": "Учащийся воспроизводимо извлекает поля из детерминированного pcap через TShark и строит карту вложения Ethernet → IPv4 → ICMP.",
+          "done": "Происхождение и SHA-256 fixture проверены; команда TShark воспроизводима; frame-map.md связывает наблюдаемые поля с границами Ethernet, IPv4 и ICMP; Observed, Inference и Unknowns разделены; network-evidence и review пройдены.",
           "checks": [
             "network-evidence",
             "review"
@@ -179,11 +179,11 @@
         {
           "id": "01-04",
           "releaseStatus": "published",
-          "title": "Сравнить cold и warm neighbor paths",
+          "title": "Сравнить обмен с пустым и заполненным кэшем соседей",
           "minutes": 55,
           "kind": "experiment",
-          "outcome": "Учащийся по двум bounded live captures доказывает, как neighbor cache меняет ARP+ICMP sequence при cold и warm run.",
-          "done": "Expected записан до первого start marker; preflight подтверждает local Docker unix endpoint и отсутствие subnet conflicts; cache reset ограничен disposable sender; каждый run имеет отдельную local raw directory, provenance и hash; evidence/comparison.md ссылается на advertised ARP MAC, Ethernet directions, matching ICMP events и состояние neighbor cache; cleanup/post-check выполнены; network-evidence и review пройдены.",
+          "outcome": "Учащийся по двум ограниченным живым захватам доказывает, как кэш соседей меняет последовательность ARP и ICMP при первом и повторном обмене.",
+          "done": "Expected записан до запуска; для cold- и warm-фаз сохранены отдельные исходные данные; comparison.md связывает ARP, направления Ethernet, соответствующие события ICMP и состояние кэша соседей; cleanup и post-check выполнены; network-evidence и review пройдены.",
           "checks": [
             "network-evidence",
             "review"
@@ -229,8 +229,8 @@
           "title": "Локализовать самый ранний недоказанный этап",
           "minutes": 50,
           "kind": "diagnose",
-          "outcome": "Учащийся сравнивает три deterministic trace bundles и локализует различие до interface, ARP, Ethernet, IPv4 или ICMP evidence.",
-          "done": "Identity/provenance всех трёх bundles проверены; для каждого case в diagnosis.md названы last proven stage и earliest missing/disproven transition с точной evidence citation; root cause не объявлен известным за границей evidence; сохранены unknowns и следующий различающий observation; network-evidence и agent review пройдены.",
+          "outcome": "Учащийся сравнивает три детерминированных набора трассировки и находит самый ранний этап, который перестают подтверждать данные интерфейса, ARP, Ethernet, IPv4 или ICMP.",
+          "done": "Происхождение всех трёх наборов проверено; для каждого случая diagnosis.md называет последний доказанный и первый недоказанный этап с точной ссылкой на данные; первопричина не объявлена без доказательств; Unknowns и следующая различающая проверка сохранены; network-evidence и agent review пройдены.",
           "checks": [
             "network-evidence",
             "review"
@@ -267,11 +267,11 @@
         {
           "id": "01-06",
           "releaseStatus": "published",
-          "title": "Восстановить полный локальный packet path",
+          "title": "Восстановить полный путь локального пакета",
           "minutes": 55,
           "kind": "integrate",
-          "outcome": "Учащийся без пошаговой подсказки восстанавливает полный path novel bundle от interface через Ethernet, optional ARP, IPv4 и ICMP до reply.",
-          "done": "Fixture identity/provenance проверены; packet-path.md содержит полный inventory и causal timeline с evidence citation для каждой arrow; epistemic ledger разделяет source facts, assumptions, observations, inferences и meaningful unknowns; вывод ограничен данной LAN/fixture, а конкретный counterfactual мог бы его опровергнуть; network-evidence и review пройдены.",
+          "outcome": "Учащийся без пошаговой подсказки восстанавливает путь нового набора данных от исходного интерфейса через Ethernet, возможный ARP, IPv4 и ICMP до ответа.",
+          "done": "Происхождение fixture проверено; packet-path.md содержит полный список кадров и причинную последовательность со ссылками на данные; source facts, assumptions, Observed, Inference и Unknowns разделены; вывод ограничен этой LAN и может быть опровергнут названным контрпримером; network-evidence и review пройдены.",
           "checks": [
             "network-evidence",
             "review"

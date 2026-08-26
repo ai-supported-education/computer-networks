@@ -1,37 +1,50 @@
-# 01-03 — Разобрать synthetic capture по полям
+# 01-03 — Разобрать поля сохранённого захвата
 
 Время: 45 минут.
 
+В предыдущей карточке вы читали состояние живой лаборатории. Такое наблюдение
+полезно, но каждый запуск немного отличается: меняются отметки времени, служебные
+идентификаторы и иногда порядок фоновых событий. На изменчивом трафике неудобно
+впервые разбираться, где заканчивается один заголовок и начинается следующий.
+
+Поэтому сейчас сеть запускать не будем. Вместо неё возьмём заранее подготовленный
+`pcap` — файл с захваченными кадрами, чей SHA-256 и происхождение известны. Один и
+тот же файл даст всем одинаковые поля, и можно будет сосредоточиться на главном:
+как TShark переходит от кадра Ethernet к IPv4 и затем к ICMP. Такой фиксированный
+учебный набор дальше будем называть fixture.
+
 ## Результат и область применимости
 
-Вы проверите provenance и SHA-256 детерминированного `pcap`, извлечёте два frames
-через TShark и создадите `frame-map.md`: карту границ Ethernet, IPv4 и ICMP с
-раздельными observations и inference.
+Вы проверите происхождение и SHA-256 детерминированного `pcap`, извлечёте два
+кадра через TShark и создадите `frame-map.md`: карту границ Ethernet, IPv4 и ICMP
+с раздельными наблюдениями и выводами.
 
-Это offline-анализ публичного synthetic fixture. Он доказывает содержимое именно
-этого файла, но не реальный обмен вашей машины. Docker network не создаётся;
-offline TShark запускается контейнером без network access.
+Это офлайн-анализ опубликованного искусственного учебного набора. Он доказывает
+содержимое именно этого файла, но не реальный обмен вашей машины. Сеть Docker не
+создаётся; TShark запускается в контейнере без доступа к сети.
 
 ## Дано
 
 - Fixture: `fixtures/01-03/known-neighbour.pcap`.
-- Expected SHA-256:
+- Версионируемый SHA-256:
   `8a4036d450c9f0953c50286f2dc99d429873900e8f92f22a1d2f8f6f1b6dc64f`.
-- Provenance рядом с fixture описывает генератор, фиксированные inputs и synthetic
-  природу данных.
-- В файле два Ethernet frames; для каждого `frame.cap_len=74 bytes` и
+- Файл provenance рядом с fixture описывает генератор, фиксированные входные
+  данные и искусственную природу данных.
+- В файле два кадра Ethernet; для каждого `frame.cap_len=74 bytes` и
   `frame.len=74 bytes`. Первое поле — реально сохранённая длина записи, второе —
-  сообщённая исходная длина frame. Ethernet FCS в fixture не записан.
+  сообщённая исходная длина кадра. Контрольная сумма Ethernet-кадра (`Frame Check
+  Sequence`, FCS) в fixture не записана, поэтому в эти 74 байта не входит.
 
-Последние два пункта — source facts из provenance. Сначала воспроизведите hash и
-TShark extraction; только после этого используйте их как verified inputs.
+Последние два пункта — исходные факты из provenance. Сначала воспроизведите hash и
+извлечение TShark; только после этого используйте их как проверенные входные данные.
 
 ## Что на самом деле лежит в pcap
 
-`pcap` — контейнер: file header плюс запись для каждого captured frame. Он не
-добавляет сетевой header к packet и не является «ещё одним layer» на wire.
+`pcap` — файловый контейнер: общий заголовок плюс запись для каждого захваченного
+кадра. Он не добавляет сетевой заголовок к пакету и не является «ещё одним слоем»
+на проводе.
 
-Для каждого frame в этом fixture границы такие:
+Для каждого кадра в этом fixture границы такие:
 
 ```text
 byte offset 0
@@ -50,18 +63,20 @@ byte offset 0
 captured bytes = frame.cap_len = 14 + 20 + 8 + 32 = 74 bytes
 ```
 
-Размерность — bytes. Sanity check: IPv4 `total_length` должен быть `20 + 8 + 32 =
-60`, а сохранённая длина — `frame.cap_len = 14 + 60 = 74`. В этом fixture
-`frame.len` тоже равен 74, то есть pcap не усёк frame. Эти выводы применимы к
-fixture, где IPv4 options и VLAN tag отсутствуют; это не формула для любого frame.
+Размерность — байты. Проверка здравого смысла: IPv4 `total_length` должен быть
+`20 + 8 + 32 = 60`, а сохранённая длина —
+`frame.cap_len = 14 + 60 = 74`. В этом fixture
+`frame.len` тоже равен 74, то есть pcap не усёк кадр. Эти выводы применимы к
+fixture без IPv4 options и VLAN tag; это не формула для любого кадра.
 
 TShark не «угадывает смысл по знакомому адресу». Он последовательно использует
-link type pcap, EtherType, IPv4 header и protocol number, а затем отображает поля
-dissector-ом.
+тип канала из pcap, EtherType, заголовок IPv4 и номер протокола. На каждом шаге
+встроенный разборщик соответствующего протокола (`dissector`) решает, как прочитать
+следующие байты и какие поля показать.
 
-## Разобранный пример 1: карта request
+## Разобранный пример 1: карта запроса
 
-Sample extraction:
+Пример извлечённых полей:
 
 ```text
 frame.number=1 frame.len=74 frame.cap_len=74
@@ -71,13 +86,13 @@ ip.src=172.30.0.10 ip.dst=172.30.0.20
 icmp.type=8 icmp.code=0
 ```
 
-Observed fields дают независимые проверки: `eth.type` выбирает IPv4,
-`ip.hdr_len`/`ip.len` задают размер datagram, `frame.cap_len` задаёт реально
-сохранённые bytes, а `ip.proto` выбирает ICMP. Inference может назвать frame Echo
-Request от `alpha` к `beta`, потому что inventory связывает эти фиксированные
-addresses с именами endpoints.
+Наблюдаемые поля дают независимые проверки: `eth.type` выбирает IPv4,
+`ip.hdr_len`/`ip.len` задают размер датаграммы, `frame.cap_len` — число реально
+сохранённых байтов, а `ip.proto` выбирает ICMP. В выводе можно назвать кадр Echo
+Request от `alpha` к `beta`, потому что исходные данные связывают эти фиксированные
+адреса с именами узлов.
 
-## Разобранный пример 2: что изменилось в reply
+## Разобранный пример 2: что изменилось в ответе
 
 ```text
 frame.number=2 frame.len=74
@@ -86,116 +101,125 @@ ip.src=172.30.0.20 ip.dst=172.30.0.10
 icmp.type=0 icmp.code=0
 ```
 
-Source/destination pairs поменялись местами, а ICMP type стал Echo Reply. Lengths
-могут остаться одинаковыми, но это не превращает две записи в один frame: у них
-разные `frame.number`, timestamps и headers.
+Пары source/destination поменялись местами, а ICMP type стал Echo Reply. Длины
+могут остаться одинаковыми, но это не превращает две записи в один кадр: у них
+разные `frame.number`, отметки времени и заголовки.
 
 ## Типичные ошибки
 
-1. **Нарисовать поля из README, не запуская extraction.** Тогда получится копия
-   expected, а не evidence того, какой файл реально прочитан. Hash и фактический
-   output обязательны.
+1. **Нарисовать поля из README, не запуская извлечение.** Тогда получится копия
+   `Expected`, а не доказательство того, какой файл реально прочитан. Hash и
+   фактический вывод обязательны.
 2. **Смешать `frame.len` и `frame.cap_len` или считать их разность с `ip.len`
-   универсальной длиной Ethernet header.** В данном fixture оба frame-поля равны
+   универсальной длиной заголовка Ethernet.** В данном fixture оба frame-поля равны
    74 и разность равна 14, но truncation, VLAN tags, padding и FCS меняют картину.
    Формулируйте вывод в границах fixture.
 
 ## Процедура
 
-1. Проверьте offline inspector без создания topology:
+1. Проверьте офлайн-инспектор без создания топологии:
 
    ```bash
    pnpm network:fixture preflight
    ```
 
-   Он допускает только local absolute `unix://` Docker endpoint, сохраняет Engine
-   ID, требует Linux
-   amd64/arm64 и уже загруженный pinned image. Если отсутствует только image,
+   Он допускает только локальный абсолютный Docker endpoint `unix://`, сохраняет
+   Engine ID, требует Linux amd64/arm64 и уже загруженный закреплённый образ. Если
+   отсутствует только image,
    выполните `pnpm network:fixture preload`, затем повторите preflight. Remote
-   context — stop condition. Любой другой non-PASS также означает остановку и
-   review; не обходите preflight ручным Docker-запуском.
+   context — условие остановки. Любой другой результат, кроме PASS, также требует
+   остановиться и запросить review; не обходите preflight ручным запуском Docker.
 
-2. До `inspect` заполните `Expected before action` в `frame-map.md`: получите ISO
-   UTC timestamp командой `node -e 'console.log(new Date().toISOString())'`.
-   Из fixture provenance как source facts перенесите только ожидаемые path/hash,
-   synthetic origin и frame count. Отдельно как pre-action expectations из
-   inspector contract этой карточки запишите local endpoint, `network=none`,
-   capability/mount/port/limit guardrails и обязательный cleanup. Не переписывайте
-   sample packet fields в observations.
-3. Проверьте provenance/hash и извлеките canonical поля в offline container:
+2. До `inspect` заполните в `frame-map.md` три отдельные секции. В `Source facts`
+   перенесите из provenance только путь, SHA-256, искусственное происхождение и
+   число кадров, сохранив ссылку на источник. В `Assumptions before action`
+   перечислите то, что ещё не подтверждено; если дополнительных допущений нет,
+   объясните это явно. В `Expected before action` получите ISO UTC timestamp
+   командой `node -e 'console.log(new Date().toISOString())'` и запишите прогноз:
+   инспектор выберет локальный endpoint, отключит сеть через `network=none`, не
+   добавит capabilities, mounts и опубликованные порты, ограничит ресурсы и удалит
+   временный контейнер. До фактического запуска всё это остаётся прогнозом. Поля
+   демонстрационного пакета не переносите в `Observations`.
+3. Проверьте provenance/hash и извлеките канонические поля в офлайн-контейнере:
 
    ```bash
    pnpm network:fixture verify fixtures/01-03/known-neighbour.pcap
    pnpm network:fixture inspect fixtures/01-03/known-neighbour.pcap
    ```
 
-   `inspect` повторно проверяет identity/preflight и создаёт новый raw run в
-   `.training/evidence/01-03/<run-id>/`: `preflight.txt`, `events.jsonl`,
-   `inspect.txt`, `post-check.txt` и служебный `recovery.json`. Runner использует
-   `--network none`, `cap-drop=ALL`, `no-new-privileges`,
-   bounded CPU/memory/PIDs и `--pull never`; verified fixture копируется exact
-   `docker cp` в disposable container filesystem, без host bind mount. Writable
-   disposable rootfs нужен только parser container и удаляется до PASS. Перед
-   parsing runner проверяет фактические network/capability/mount/port/limit fields
-   через `docker inspect` и сохраняет normalized snapshot в `inspect.txt`.
-   Команда считается успешной только если exact offline container удалён и output
-   заканчивается `exact_container_absent=true`. При `Fixture cleanup FAILED`
-   остановитесь; выполните только напечатанную команду вида
+   Перед чтением файла `inspect` ещё раз выполняет предварительную проверку и
+   создаёт отдельную директорию `.training/evidence/01-03/<run-id>/`. В ней
+   появляются исходные `preflight.txt`, `events.jsonl`, `inspect.txt`,
+   `post-check.txt` и данные для безопасного восстановления `recovery.json`.
+
+   Временный контейнер запускается без сети (`--network none`), без дополнительных
+   Linux capabilities (`cap-drop=ALL`), с `no-new-privileges`, ограничениями
+   CPU/memory/PIDs и без загрузки нового образа (`--pull never`). Fixture
+   копируется внутрь командой `docker cp`, поэтому контейнер не получает host bind
+   mount. Перед TShark тренажёр сверяет эти фактические свойства через
+   `docker inspect` и сохраняет нормализованный снимок в `inspect.txt`.
+
+   Успешный запуск заканчивается только после удаления именно этого контейнера и
+   записи `exact_container_absent=true`. Если появилось `Fixture cleanup FAILED`,
+   остановитесь и выполните только напечатанную команду
    `pnpm network:fixture cleanup .training/evidence/01-03/<failed-run-id>`, затем
-   проверьте `pnpm network:lab status`. Recovery читает сохранённые endpoint,
-   Engine ID, reserved name/role, run label и container ID из `recovery.json`,
-   поэтому откажется удалять объект из другого Docker daemon или с другой
-   identity. После
-   удаления он ждёт bounded clean quiescence на случай позднего завершения create.
-   Напечатанный
-   `failed_run` сохраняйте как failed
-   evidence; повтор получает новый run id и не перезаписывает его. Недоступный
-   daemon или permission error не считается доказательством отсутствия container
-   и блокирует cleanup PASS.
-4. Укажите один exact run directory в `frame-map.md`. Из `events.jsonl` перенесите
-   `at` записи `phase="inspect"`, `kind="action"`; из `post-check.txt` —
-   `checked_at`, exact cleanup marker и нулевые labelled counts. Все полные raw
-   paths должны относиться к тому же run id.
-5. Заполните `frame-map.md` своими observed values из `inspect.txt`. Для каждого из
-   двух frames укажите field → protocol unit → что поле доказывает.
-6. Для каждого frame выполните два sanity checks: IPv4 total length и
+   проверьте `pnpm network:lab status`. Для выбора цели команда читает из
+   `recovery.json` endpoint, Engine ID, зарезервированное имя и роль, run label и
+   container ID. При несовпадении Docker daemon или identity она откажется от
+   удаления. После удаления тренажёр ещё некоторое ограниченное время проверяет,
+   что контейнер не появился снова из-за запоздавшего ответа Docker. Сохраните
+   напечатанный `failed_run`: повтор получит новый run id и не перезапишет эту
+   попытку. Недоступный daemon или ошибка прав не доказывают отсутствие контейнера
+   и поэтому блокируют PASS очистки.
+4. Укажите одну точную директорию запуска в `frame-map.md`. Из `events.jsonl`
+   перенесите `at` записи `phase="inspect"`, `kind="action"`; из `post-check.txt` —
+   `checked_at`, признак очистки `exact_container_absent=true` и нулевые счётчики
+   ресурсов с метками курса. Все полные пути к исходным данным должны относиться к
+   тому же run id.
+5. Заполните `frame-map.md` своими значениями `Observed` из `inspect.txt`. Для
+   каждого из двух кадров укажите: поле → единица протокола → что поле доказывает.
+6. Для каждого кадра выполните две проверки здравого смысла: IPv4 total length и
    `frame.cap_len`; отдельно сравните `frame.len` с `frame.cap_len` и объясните,
-   что равенство означает отсутствие truncation только для этой записи.
-7. Отдельно напишите inference и минимум два unknown/ограничения, включая FCS и
-   применимость к VLAN/options/truncated captures.
+   что равенство означает отсутствие усечения только для этой записи.
+7. Отдельно напишите `Inference` и минимум два `Unknowns` или ограничения,
+   включая FCS и применимость к VLAN/options/truncated captures.
 8. Подтвердите чистый labelled status командой `pnpm network:lab status`.
 
-Остановитесь, если hash отличается, fixture не synthetic по provenance,
-`verify`/`inspect` или parser container просит network access либо TShark
-показывает не два frames. Единственное разрешённое исключение — отдельно
-описанный `network:fixture preload` при exact missing-image preflight; сам анализ
-остаётся offline. Не «чините» pcap и не подгоняйте карту; сохраните discrepancy
-как observed и запросите review.
+Остановитесь, если hash отличается, provenance не подтверждает искусственное
+происхождение fixture, `verify`/`inspect` или контейнер-парсер просит доступ к
+сети либо TShark показывает не два кадра. Единственное разрешённое исключение —
+отдельно описанный `network:fixture preload`, если preflight сообщает именно об
+отсутствующем образе; сам анализ остаётся офлайн. Не «чините» pcap и не
+подгоняйте карту; сохраните расхождение как `Observed` и запросите review.
 
-## Проверка и evidence
+## Проверка и доказательства
 
-- Local: `network-evidence` проверяет sections, один exact raw run, порядок
-  Expected/action/cleanup timestamps, raw filenames, оба frame id, length fields с
-  единицами, hash, exact cleanup marker и отсутствие TODO. Он не оценивает
-  свободный inference как эталонную строку.
-- Empirical: run-scoped `inspect.txt` сохраняет method, hash и фактические TShark
-  fields; `post-check.txt` связывает cleanup с тем же run.
-- Agent: проверяет связь каждого inference с cited fields, арифметику и границы
-  применимости.
-- Evidence: `frame-map.md`; сам fixture и canonical companion уже versioned.
+- Локально: `network-evidence` проверяет секции, один точный запуск с исходными
+  данными, порядок отметок Expected/action/cleanup, имена исходных файлов, оба
+  frame id, поля длины с единицами, hash, точный cleanup marker и отсутствие TODO.
+  Он не оценивает свободный `Inference` как эталонную строку.
+- Практически: относящийся к запуску `inspect.txt` сохраняет method, hash и
+  фактические поля TShark; `post-check.txt` связывает cleanup с тем же запуском.
+- Агент: проверяет связь каждого `Inference` с процитированными полями, арифметику
+  и границы применимости.
+- Доказательство: `frame-map.md`; сам fixture и каноническое текстовое
+  представление уже хранятся в репозитории.
 
 ## DONE
 
 - [ ] Hash совпал с provenance до анализа.
-- [ ] Expected записан до raw action marker; preflight/action/inspect/post-check
-      одного unique run сохранены и процитированы.
-- [ ] Оба frames разобраны на Ethernet, IPv4 и ICMP по фактическим fields из raw
+- [ ] Source facts процитированы из provenance, assumptions отделены от них и от
+      прогноза; `Expected` записан до отметки начала действия.
+- [ ] `preflight.txt`, `events.jsonl`, `inspect.txt` и `post-check.txt` одного
+      уникального запуска сохранены и процитированы.
+- [ ] Оба кадра разобраны на Ethernet, IPv4 и ICMP по фактическим полям из исходного
       `inspect.txt`.
-- [ ] Для обоих frames расчёты `ip.len` и `frame.cap_len` имеют единицы; различие
+- [ ] Для обоих кадров расчёты `ip.len` и `frame.cap_len` имеют единицы; различие
       original/captured length явно учтено.
-- [ ] Observations, inference и unknowns разделены.
-- [ ] Offline inspect сообщил `exact_container_absent=true`; labelled status чист.
+- [ ] `Observations`, `Inference` и `Unknowns` разделены.
+- [ ] Офлайн-анализ сообщил `exact_container_absent=true`; статус ресурсов с
+      метками курса чист.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.
 
-Следующий шаг `01-04` проверит, что происходит до Echo Request при пустом neighbor
-cache; текущий fixture намеренно не объясняет этот механизм.
+Следующий шаг `01-04` проверит, что происходит до Echo Request при пустом кэше
+соседей; текущий fixture намеренно не объясняет этот механизм.

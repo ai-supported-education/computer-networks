@@ -1,68 +1,89 @@
-# 01-04 — Сравнить cold и warm neighbor paths
+# 01-04 — Сравнить обмен с пустым и заполненным кэшем соседей
 
 Время: 55 минут.
 
-## Результат и разрешённый scope
+В статическом захвате из `01-03` Echo Request уже имел MAC-адрес назначения. Но
+откуда он взялся? IPv4-адрес `172.30.0.20` не превращается в MAC сам собой, а без
+MAC-адреса интерфейс не сможет собрать кадр Ethernet для соседнего узла.
 
-Вы проведёте две bounded phases внутри одного live run между `cn-alpha` и
-`cn-beta` в изолированной Docker LAN:
+Живая лаборатория позволяет увидеть недостающий шаг. В обычной системе нужная
+запись могла сохраниться от прошлого обмена, поэтому один только «первый `ping`»
+ничего не гарантирует. Здесь тренажёр сначала удаляет ровно соответствие для
+`172.30.0.20` и проверяет его отсутствие. В таком контролируемом состоянии Echo
+должен начаться с вопроса ARP «кто владеет `172.30.0.20`?»; если этого порядка нет,
+фаза не считается холодной (`cold`) и запуск останавливается. Следующий `ping` уже может
+использовать сохранённое соответствие. Мы сравним эти два пути: `cold`, когда
+записи ещё нет, и `warm`, когда она уже есть.
 
-- **cold:** перед probe у `alpha` нет готовой neighbor entry для `beta`;
-- **warm:** entry уже появилась после успешного cold exchange.
+## Результат и разрешённая область
 
-Для каждой phase сохраните neighbor state, ограниченный capture и normalized
-TShark companion, затем заполните `evidence/comparison.md`. Разрешён единственный
-target `172.30.0.20`, один ICMP Echo, до 3 секунд и не более 8 captured frames на
-phase.
-После работы topology полностью удаляется.
+Вы проведёте две ограниченные фазы одного живого запуска между `cn-alpha` и
+`cn-beta` в изолированной LAN Docker:
 
-## Причинная модель: зачем IP endpoint нужен ещё один адрес
+- **cold:** перед пробой у `alpha` нет готовой записи о соседе `beta`;
+- **warm:** запись уже появилась после успешного cold-обмена.
 
-В этой лаборатории принято, что `.10` и `.20` находятся в одной LAN. Чтобы
-Ethernet interface `alpha` отправил frame, header нуждается в destination MAC.
-IPv4 destination `.20` сам по себе не заполняет это поле.
+Для каждой фазы сохраните состояние кэша соседей, ограниченный захват и
+нормализованное текстовое представление TShark, затем заполните
+`evidence/comparison.md`. Разрешена единственная цель `172.30.0.20`, один ICMP
+Echo, до 3 секунд и не более 8 захваченных кадров на фазу. После работы топология
+полностью удаляется.
 
-ARP связывает известный IPv4 соседнего endpoint с его MAC:
+## Причинная модель: зачем IPv4-узлу нужен ещё один адрес
+
+В этой лаборатории мы пока используем допущение (`assumption`), что `.10` и `.20`
+находятся в одной LAN; проверку по префиксу отложим до главы 02. Чтобы
+интерфейс Ethernet узла `alpha` отправил кадр, заголовку нужен MAC-адрес
+назначения. Один IPv4-адрес назначения `.20` не заполняет это поле.
+
+ARP связывает известный IPv4-адрес соседнего узла с его MAC:
 
 ```text
-alpha knows destination IPv4 .20
-           ↓ neighbor cache lookup
-entry absent (cold)
+alpha знает IPv4-адрес назначения .20
+           ↓ проверка кэша соседей
+записи нет (cold)
            ↓
-Ethernet broadcast ARP Request:
+широковещательный ARP Request в кадре Ethernet:
 "who has 172.30.0.20? tell 172.30.0.10"
-           ↓ beta recognizes its IPv4
-unicast ARP Reply: ".20 is at 02:42:ac:1e:00:14"
-           ↓ alpha stores neighbor entry
-Ethernet unicast IPv4/ICMP Echo Request
+           ↓ beta распознаёт запрос к уже назначенному ему IPv4-адресу
+одноадресный ARP Reply: «.20 находится по адресу 02:42:ac:1e:00:14»
+           ↓ alpha сохраняет запись о соседе
+одноадресный IPv4/ICMP Echo Request в кадре Ethernet
            ↓
-Ethernet unicast IPv4/ICMP Echo Reply
+одноадресный IPv4/ICMP Echo Reply в кадре Ethernet
 ```
 
-При warm phase cache lookup уже может вернуть MAC, поэтому новые ARP frames перед
-ICMP не нужны. «Может» здесь важно: cache state и таймеры — runtime facts. Именно
-поэтому мы сохраняем `ip neigh` до каждого probe, а не объявляем вторую phase warm
-только по порядковому номеру.
+В warm-фазе проверка кэша уже может вернуть MAC, поэтому новые кадры ARP перед
+ICMP не нужны. «Может» здесь важно: состояние кэша и таймеры устанавливаются во
+время запуска. Поэтому мы сохраняем вывод `ip neigh` перед каждой пробой, а не
+называем вторую фазу warm только по её порядковому номеру.
 
-Source fact: формат ARP request/reply определён в
-[RFC 826](https://www.rfc-editor.org/rfc/rfc826.html). Source fact для этой
-лаборатории: fixed inventory из `lab-environment.md`. Observed: фактические
-neighbor rows и captured frames. Inference: связь изменения cache с различием
-timelines.
+Исходный факт (`source fact`): формат ARP Request/Reply определён в
+[RFC 826](https://www.rfc-editor.org/rfc/rfc826.html). Ещё один исходный факт для
+этой лаборатории — фиксированные адреса из `lab-environment.md`. `Observed` —
+фактические строки кэша соседей и захваченные кадры. `Inference` — связь изменения
+кэша с различием последовательностей.
 
-## Почему capture снимается в source network namespace
+## Почему захват снимается в сетевом пространстве исходного узла
 
-Docker bridge не является «зеркальным портом»: третий обычный container не обязан
-получить known-unicast frames между двумя endpoints. Capture helper поэтому
-кратковременно разделяет network namespace `alpha`. Он видит тот же `eth0`, но
-получает только `NET_RAW`; такой же capability получает bounded probe. Отдельный
-neighbor-flush helper получает только `NET_ADMIN` и удаляется до capture.
-Endpoints остаются без лишних capabilities. Docker socket внутрь containers не
-монтируется.
+Обычный третий контейнер на мосту Docker не получает копию каждого одноадресного
+кадра между `alpha` и `beta`, поэтому отсутствие кадра в таком месте ничего не
+доказывало бы. Почему мост выбирает конкретное направление, разберём в главе о
+коммутации. Сейчас достаточно поместить точку захвата рядом с отправителем:
+вспомогательный контейнер кратковременно разделяет сетевое пространство имён
+`alpha` и видит тот же `eth0`.
+
+Контейнер захвата и ограниченная Echo-проба получают только Linux-разрешение
+`NET_RAW`. Отдельный помощник для очистки кэша соседей получает только `NET_ADMIN`
+и удаляется до захвата. Сами узлы остаются без дополнительных capabilities;
+Docker socket и пути хоста внутрь контейнеров не монтируются. Единственное
+разрешённое подключаемое хранилище — именованный volume текущей фазы в
+`/evidence` у контейнера захвата. Echo-проба и помощник очистки кэша не получают
+mounts.
 
 ## Разобранный пример 1: cold timeline
 
-Synthetic sample (это не ваше observed):
+Искусственный пример (это не ваше `Observed`):
 
 ```text
 1  eth.dst=ff:ff:ff:ff:ff:ff arp.opcode=1 arp.dst.proto_ipv4=172.30.0.20
@@ -74,9 +95,10 @@ Synthetic sample (это не ваше observed):
    eth.type=0x0800 ip.src=172.30.0.20 icmp.type=0
 ```
 
-Сначала разрешается link-layer destination, затем отправляется ICMP. Строка 2
-связывает `.20` и `…:14`; строка 3 показывает использование этого MAC в отдельном
-frame. Нельзя утверждать, что «ARP содержит ping»: это разные protocol messages.
+Сначала определяется адрес назначения канального уровня, затем отправляется ICMP.
+Строка 2 связывает `.20` и `…:14`; строка 3 показывает использование этого MAC в
+отдельном кадре. Нельзя утверждать, что «ARP содержит ping»: это разные сообщения
+протоколов.
 
 ## Разобранный пример 2: warm без ARP перед Echo
 
@@ -88,126 +110,149 @@ neighbor-before: 172.30.0.20 dev eth0 lladdr 02:42:ac:1e:00:14 REACHABLE
    eth.type=0x0800 ip.src=172.30.0.20 icmp.type=0
 ```
 
-Observed neighbor row плюс отсутствие ARP до Echo согласуются с cache reuse.
-После Echo в том же bounded window могут появиться другие ARP frames из-за
-runtime state второго endpoint; они не превращают отправку Echo Request задним
-числом в cold path. Само отсутствие предшествующего ARP без neighbor snapshot
-было бы слабее: capture мог стартовать поздно или использовать неправильный
-interface/filter.
+Строка кэша соседей из `Observed` и отсутствие ARP до Echo согласуются с повторным
+использованием записи. После Echo в том же ограниченном окне могут появиться
+другие кадры ARP из-за текущего состояния второго узла; они не превращают
+отправку Echo Request задним числом в cold path. Одного отсутствия предшествующего
+ARP без снимка кэша было бы недостаточно: захват мог начаться поздно или
+использовать не тот интерфейс либо фильтр.
 
-## Preflight, expected и stop conditions
+## Preflight, Expected и условия остановки
 
 1. `pnpm network:lab status` должен показать чистое состояние.
-2. `pnpm network:lab preflight` должен подтвердить local absolute `unix://`
-   endpoint, неизменный Engine ID, rootful Engine, `subnet_conflicts=0` и clean
-   initial state; image
-   заранее загружен командой `pnpm network:lab preload` при необходимости. Remote
-   context или subnet conflict — stop condition; не удаляйте существующую network
-   ради карточки.
-3. До `up` заполните Expected в `evidence/comparison.md`: поставьте UTC timestamp
-   и отдельно предскажите cold/warm timelines. Не копируйте туда «observed».
-4. Остановитесь при любом target кроме `.20`, неожиданном interface, отсутствии
-   isolated mode, несоответствии fixed inventory, превышении time/frame limits,
-   появлении чужих payloads или lab resources от другого run.
+2. `pnpm network:lab preflight` должен ответить на три вопроса: выбран ли локальный
+   Docker через абсолютный `unix://` endpoint; остался ли прежним Engine ID и
+   работает ли Engine не в rootless-режиме; свободна ли подсеть
+   (`subnet_conflicts=0`) и чисто ли начальное состояние. При необходимости образ
+   заранее загружается командой `pnpm network:lab preload`. Удалённый context или
+   конфликт подсетей — условие остановки; не удаляйте существующую сеть ради
+   карточки.
+3. До `up` заполните в `evidence/comparison.md` отдельные `Source facts`,
+   `Assumptions before action` и `Expected before action`. Для фактов сохраните
+   ссылки на RFC и `lab-environment.md`, допущение об одной LAN не выдавайте за
+   вычисленный результат, а в Expected поставьте отметку UTC и отдельно
+   предскажите последовательности cold/warm. Не копируйте туда `Observed`.
+4. Остановитесь при любой цели кроме `.20`, неожиданном интерфейсе, отсутствии
+   isolated mode, несовпадении фиксированных адресов, превышении ограничений по
+   времени или кадрам, появлении чужого содержимого либо ресурсов лаборатории из
+   другого запуска.
 
 ## Процедура
 
-1. Поднимите exact topology:
+1. Поднимите только заданную топологию:
 
    ```bash
    pnpm network:lab up 01-04
    ```
 
-   Сохранённый run-scoped `preflight.json` должен показывать initial counts
-   local endpoint, `networkInventory.conflictCount=0` и initial counts `0/0/0`
-   для containers/networks/volumes, а последующий `topology-inspect.json` — exact
-   isolation/exposure guardrails.
+   Сохранённый для этого запуска `preflight.json` должен показывать локальный
+   endpoint, `networkInventory.conflictCount=0` и начальные счётчики `0/0/0` для
+   containers/networks/volumes, а последующий `topology-inspect.json` — точные
+   ограничения isolation/exposure.
 
-2. Создайте cold/warm evidence bundle. Runner очищает только neighbor entry `.20`
-   внутри разрешённого namespace, ставит start markers, ограничивает capture и
-   запускает ровно bounded Echo probes:
+2. Создайте набор доказательств cold/warm. Тренажёр очищает только запись `.20` в
+   кэше соседей внутри разрешённого namespace, ставит отметки начала, ограничивает
+   захват и запускает ровно заданные Echo-пробы:
 
    ```bash
    pnpm network:lab capture
    ```
 
-   Команда принимает PASS только когда cold capture содержит ordered matching
-   ARP exchange, где reply фактически рекламирует MAC beta, и Echo Request/Reply;
-   warm neighbor-before содержит expected IPv4-to-MAC mapping, а Echo Reply
-   совпадает со своим Request по observed identifier/sequence; target ARP до
-   первого warm Echo Request отсутствует. Target ARP после первого Echo допустим
-   и не меняет уже доказанный warm order.
+   Команда принимает PASS только тогда, когда cold-захват содержит упорядоченный
+   согласованный обмен ARP, где ответ действительно сообщает MAC узла `beta`, а
+   затем Echo Request/Reply; `warm/neighbor-before` содержит ожидаемое
+   соответствие IPv4 и MAC, а Echo Reply совпадает со своим Request по
+   наблюдаемым identifier/sequence; ARP для целевого адреса до первого warm Echo
+   Request отсутствует. Такой ARP после первого Echo допустим и не меняет уже
+   доказанный порядок warm-фазы.
    Identifier/sequence должны совпасть внутри пары, но их конкретное числовое
-   значение не фиксируется между phases. Capture сначала
-   пишется в exact labelled volume, затем `docker cp` создаёт host artifact от
-   имени вызывающего пользователя. Повтор создаёт новый run directory и не
-   перезаписывает raw pcap. До запуска каждого helper runner сохраняет
-   `helpers/<role>.json` из фактического Docker inspect и сверяет exact name/labels,
-   shared network namespace, только нужную capability (`NET_RAW` для capture/probe
-   или `NET_ADMIN` для bounded neighbor flush), `no-new-privileges`, read-only
-   rootfs, bounded tmpfs/CPU/memory/PIDs, mounts и отсутствие published ports.
-3. Укажите один exact run directory в `evidence/comparison.md`. Перенесите
-   фактические neighbor-before/after, pcap SHA-256 и normalized event rows со
-   ссылками на `cold/` и `warm/`, не фиксируя как invariant timestamps, IP ID,
+   значение не фиксируется между фазами. Захват сначала пишется в volume с
+   точной меткой, затем `docker cp` создаёт файл на хосте от имени вызывающего
+   пользователя. Повтор создаёт новую директорию запуска и не перезаписывает
+   исходный pcap.
+
+   Перед запуском каждого временного помощника тренажёр проверяет его через
+   `docker inspect`. Контейнер захвата и Echo-пробы получают только `NET_RAW`, а
+   контейнер точечной очистки кэша — только `NET_ADMIN`; все они используют
+   сетевое пространство `alpha`, `no-new-privileges`, read-only rootfs и
+   ограничения tmpfs/CPU/memory/PIDs и не имеют опубликованных портов. У
+   capture-helper есть ровно один именованный volume текущей фазы в `/evidence`;
+   у probe- и neighbor-helper mounts отсутствуют. Результат сохраняется в
+   `helpers/<role>.json`. В `comparison.md` достаточно сослаться на эти снимки и
+   кратко подтвердить разделение разрешений `NET_RAW`/`NET_ADMIN` и точный mount
+   contract — переписывать каждое служебное поле не нужно.
+3. Укажите одну точную директорию запуска в `evidence/comparison.md`. Перенесите
+   фактические neighbor-before/after, SHA-256 pcap и нормализованные строки
+   событий со ссылками на `cold/` и `warm/`, не фиксируя как invariant timestamps, IP ID,
    конкретный ICMP identifier или checksums.
-4. Сравните timelines: что присутствует в cold, что отсутствует/присутствует в
-   warm, какое cache evidence объясняет различие и какие альтернативы ещё
-   возможны.
-5. Cleanup и post-check:
+4. Сравните последовательности: что присутствует в cold, что отсутствует или
+   присутствует в warm, какие данные кэша объясняют различие и какие альтернативы
+   ещё возможны.
+5. Удалите ресурсы и проверьте конечное состояние:
 
    ```bash
    pnpm network:lab down
    pnpm network:lab status
    ```
 
-   `down` сверяет persisted endpoint + Engine ID и reserved name/ID/owner/run/role,
-   затем ждёт bounded clean quiescence. Сошлитесь на raw `post-check.txt` того же
-   run. При runtime discrepancy capture
-   fail-closed записывает error и пытается выполнить exact cleanup; не запускайте
-   ручной probe, сохраните failed run. Если cleanup не PASS, active state остаётся
-   для повторного scoped `pnpm network:lab down`.
+   `down` сверяет сохранённые endpoint и Engine ID, а также имя, ID, владельца,
+   run label и роль каждого ресурса. После удаления он ограниченное время
+   проверяет, что чистое состояние сохраняется. Сошлитесь на исходный
+   `post-check.txt` того же запуска. При
+   фактическом расхождении захват останавливается безопасно, записывает ошибку и
+   пытается удалить только свои ресурсы; не запускайте ручную пробу, сохраните
+   неудачный запуск. Если cleanup не PASS, активное состояние остаётся для
+   повторного ограниченного `pnpm network:lab down`.
 
 ## Два правдоподобных неверных пути
 
-1. **Очистить neighbor cache macOS/Linux host.** Lab endpoints живут в отдельных
-   network namespaces; host cache не задаёт состояние `alpha`. Такой run не будет
-   доказан как cold.
-2. **Поставить третий sniffer на bridge и трактовать отсутствие unicast как packet
-   loss.** Known-unicast не обязан попадать этому endpoint. Capture point должен
-   быть source namespace, а его identity — частью provenance.
+1. **Очистить кэш соседей на хосте macOS/Linux.** Узлы лаборатории живут в
+   отдельных сетевых пространствах имён; кэш хоста не задаёт состояние `alpha`.
+   Такой запуск не будет доказан как cold.
+2. **Поставить третий контейнер-сниффер на мост и трактовать отсутствие кадра как
+   потерю.** Одноадресный кадр с уже известным MAC назначения не обязан попадать
+   этому контейнеру. Точка захвата должна находиться в сетевом пространстве
+   отправителя, а её точное место — быть зафиксировано в provenance.
 
-## Проверка и evidence
+## Проверка и доказательства
 
-- Local: `network-evidence` проверяет headings, timestamp order, один run id,
-  обязательные cold/warm raw filenames и hashes, neighbor/ARP/ICMP/matching fields,
-  cleanup counts и отсутствие TODO. Semantics runner gate и regression matrix
-  приведены в consistency-only `acceptance.md`.
-- Empirical: pcap, normalized companions и neighbor snapshots созданы фактическим
-  bounded run.
-- Agent: сверяет timeline с raw/normalized evidence, осторожность inference,
-  rerun policy и финальный clean state.
-- Evidence: `evidence/comparison.md` плюс локальный уникальный run directory; raw
-  `*.pcap` исключён из Git.
+- Локально: `network-evidence` проверяет заголовки, порядок отметок времени, один
+  run id, обязательные имена исходных cold/warm-файлов и hashes,
+  состояние кэша, порядок ARP/ICMP, совпадение identifier/sequence внутри Echo-пар,
+  итоговые счётчики очистки и отсутствие TODO.
+- Практически: pcap, нормализованные текстовые представления и снимки кэша
+  соседей созданы фактическим ограниченным запуском.
+- Агент: сверяет последовательность с исходными и нормализованными
+  доказательствами, осторожность `Inference`, rerun policy и итоговое чистое
+  состояние.
+- Доказательство: `evidence/comparison.md` плюс локальная уникальная директория
+  запуска; исходный `*.pcap` исключён из Git.
 
 ## DONE
 
-- [ ] Expected cold/warm timestamp раньше action start; saved preflight показывает
-      local `unix://` endpoint + Engine ID, `networkInventory.conflictCount=0`, initial counts
-      `0/0/0`, exact targets и pinned environment.
-- [ ] Cold phase имеет neighbor-before и bounded capture; warm phase имеет отдельные
-      snapshot/capture.
-- [ ] Comparison ссылается на observed rows и не сравнивает variable fields как
-      фиксированные.
-- [ ] Matching Echo pairs доказаны observed identifier/sequence внутри каждой phase.
-- [ ] Cold ARP Reply рекламирует observed MAC beta; Ethernet directions Echo
-      совпадают с fixed inventory.
-- [ ] Warm neighbor-before содержит expected mapping, а до первого warm Echo
-      Request нет target ARP; более поздний ARP не считается нарушением.
-- [ ] `helpers/*.json` подтверждают runtime identity и минимальные safety/resource
-      guardrails всех capture/probe/neighbor helpers.
-- [ ] Raw post-check того же run подтверждает ноль labelled containers, networks
-      и volumes после bounded reconciliation/quiescence window.
+- [ ] Отметка `Expected` для cold/warm предшествует action start; сохранённый
+      preflight показывает локальный `unix://` endpoint, Engine ID,
+      `networkInventory.conflictCount=0`, начальные counts `0/0/0`, точные цели и
+      закреплённое окружение.
+- [ ] Для cold-фазы сохранены neighbor-before и ограниченный захват; для warm-фазы
+      — отдельные снимок и захват.
+- [ ] `Comparison` ссылается на строки `Observed` и не сравнивает изменчивые поля
+      как фиксированные.
+- [ ] Соответствующие пары Echo доказаны наблюдаемыми identifier/sequence внутри
+      каждой фазы.
+- [ ] Cold ARP Reply сообщает наблюдаемый MAC узла `beta`; направления Ethernet
+      для Echo совпадают с фиксированными адресами.
+- [ ] Warm neighbor-before содержит ожидаемое соответствие, а до первого warm Echo
+      Request нет ARP для целевого адреса; более поздний ARP не считается нарушением.
+- [ ] `helpers/*.json` подтверждают точные имена и метки временных контейнеров,
+      нужное сетевое пространство, разделение `NET_RAW`/`NET_ADMIN`, отсутствие
+      лишних mounts и портов и заданные ограничения ресурсов. У каждого
+      capture-helper есть ровно один volume текущей фазы в `/evidence`; у probe- и
+      neighbor-helper mounts нет.
+- [ ] Исходный post-check того же запуска подтверждает ноль containers, networks и
+      volumes с метками курса после ограниченной проверки устойчивого чистого
+      состояния.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.
 
-Следующий шаг `01-05` использует только synthetic evidence bundles и не требует
-оставлять Docker запущенным.
+Следующий шаг `01-05` использует только искусственные наборы доказательств и не
+требует оставлять Docker запущенным.

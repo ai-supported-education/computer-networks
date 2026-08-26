@@ -1,59 +1,62 @@
 # Packet path 01-06
 
-## Expected before action
-
-TODO: ISO UTC timestamp до `inspect`, ожидаемая форма bounded evidence и границы
-вывода без target observations.
-
-## Inspector action and raw evidence
-
-TODO: один `.training/evidence/01-06/<run-id>/`, action timestamp из
-`events.jsonl` и ссылки на `preflight.txt`, `events.jsonl`, `inspect.txt` и
-`post-check.txt`.
+Собирайте путь только из данных своего `inspect.txt`. Если для стрелки нет
+наблюдения, оставьте её в `Assumptions` или `Unknowns`, а не достраивайте по
+типичному поведению `ping`.
 
 ## Fixture identity and provenance
 
-TODO: path, observed SHA-256, synthetic provenance и versioned
-`novel-local-exchange.baseline.txt`.
+TODO: path, наблюдаемый SHA-256, искусственное происхождение и хранящийся в
+репозитории `novel-local-exchange.baseline.txt`.
 
 ## Source facts
 
-TODO
+TODO: только утверждения из versioned provenance и baseline с точными ссылками.
 
 ## Assumptions
 
-TODO
+TODO: предоставленное допущение об одной LAN и другие недоказанные утверждения;
+если дополнительных нет, напишите это явно.
+
+## Expected before action
+
+TODO: отметка времени ISO UTC до `inspect`, ожидаемая форма ограниченного
+доказательства и границы вывода без `Observations` из целевого fixture.
+
+## Inspector action and raw evidence
+
+TODO: одна директория `.training/evidence/01-06/<run-id>/`, отметка времени
+действия из `events.jsonl` и ссылки на `preflight.txt`, `events.jsonl`,
+`inspect.txt` и `post-check.txt`.
 
 ## Frame inventory
 
-TODO: все frame numbers и применимые Ethernet/ARP/IPv4/ICMP fields, включая
+TODO: все frame numbers и применимые поля Ethernet/ARP/IPv4/ICMP, включая
 `icmp.ident` и `icmp.seq` для Echo frames.
 
 ## Echo pair correlation
 
-TODO: перенесите observed значения из raw `inspect.txt` и заполните ровно по
-одной строке на каждый Echo frame. После строк объясните, почему frames 3→4 и
-5→6 образуют две разные request/reply пары.
+TODO: самостоятельно найдите все Echo-кадры в исходном `inspect.txt`. Для каждого
+добавьте одну строку показанного формата, подставив наблюдаемый номер и поля. Затем
+перечислите найденные Request/Reply-пары и объясните сопоставление по адресам,
+`icmp.type`, `icmp.ident` и `icmp.seq`; не используйте один только порядок кадров.
 
 ```text
-echo_frame=3 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
-echo_frame=4 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
-echo_frame=5 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
-echo_frame=6 eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
+echo_frame=<observed frame number> eth.src=<observed> eth.dst=<observed> ip.src=<observed> ip.dst=<observed> icmp.type=<observed> icmp.ident=<observed> icmp.seq=<observed>
 ```
 
 ## Causal stages
 
-TODO: stages и стрелки; companion cite имеет форму `path:line`, frame cite —
-`inspect.txt`, `frame.number=N`, exact `field=value`.
+TODO: этапы и стрелки; ссылка на companion имеет форму `path:line`, ссылка на кадр
+— `inspect.txt`, `frame.number=N`, точное `field=value`.
 
 ## Observations
 
-TODO: только фактически извлечённые данные.
+TODO: только фактически извлечённые данные со ссылками на источник.
 
 ## Inferences
 
-TODO: ограниченные выводы из facts + assumptions + observations.
+TODO: ограниченные выводы из `Source facts` + `Assumptions` + `Observations`.
 
 ## Unknowns
 
@@ -61,7 +64,7 @@ TODO: минимум три.
 
 ## Counterfactual
 
-TODO: какое конкретное изменение evidence опровергло бы главный inference.
+TODO: какое конкретное изменение доказательств опровергло бы главный `Inference`.
 
 ## Final bounded conclusion
 
@@ -69,5 +72,6 @@ TODO: одна фраза и область применимости.
 
 ## Cleanup status
 
-TODO: cleanup/post-check timestamp того же run, фактические
-`exact_container_absent=true`, labelled counts `0/0/0` и `network:lab status`.
+TODO: время post-check того же запуска, фактическое
+`exact_container_absent=true`, счётчики ресурсов с метками курса `0/0/0` и
+результат `network:lab status`.

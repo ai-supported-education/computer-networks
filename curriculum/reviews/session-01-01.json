@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "session",
   "id": "01-01",
-  "contentHash": "0e1979fcef6c194d24bf82f2b2ec31ad25ce26fad506d90484c8af5b8104a093",
+  "contentHash": "3aaeeb4d8788beaddd2243a221b8ff54090999a68cd533bd75bef07d9b256874",
   "verdict": "PASS",
-  "reviewedAt": "2026-08-23T01:38:53.474Z",
-  "attestedAt": "2026-08-23T01:44:16.074Z",
-  "reportSha256": "39bc2ae29ed30d0e1bde695ed84183900f54fdc4120c3f139de8b95d7c7ca753",
-  "protocol": "blind-then-consistency-v1"
+  "reviewedAt": "2026-08-26T08:43:15.679Z",
+  "attestedAt": "2026-08-26T08:43:16.018Z",
+  "reportSha256": "d6bb6b8a75178e4fb64f37000b54221ca6066dd8bfdfaace6f2324479569408d",
+  "protocol": "first-contact-blind-consistency-v3"
 }

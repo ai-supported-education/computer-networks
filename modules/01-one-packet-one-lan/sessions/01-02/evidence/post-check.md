@@ -1,5 +1,8 @@
 # Post-check 01-02
 
+Этот файл подтверждает, что ресурсы именно вашего запуска удалены. Успешного кода
+завершения `down` без данных из `post-check.txt` недостаточно.
+
 ## Cleanup action
 
 TODO: значение `at` из записи `phase="cleanup"`, `kind="cleanup"` в
@@ -9,16 +12,16 @@ TODO: значение `at` из записи `phase="cleanup"`, `kind="cleanup"
 ## Raw post-check evidence
 
 TODO: путь `.training/evidence/01-02/<тот-же-run-id>/post-check.txt` и method/owner
-label из raw файла; отдельно перенесите `checked_at` как timestamp наблюдения
-конечного состояния.
+label из исходного файла; отдельно перенесите `checked_at` как отметку времени
+наблюдения конечного состояния.
 
 ## Observed status
 
 TODO: фактические `containers=0`, `networks=0`, `volumes=0`, exact-state и
-labelled counts из raw post-check плюс результат независимого
+labelled counts из исходного post-check плюс результат независимого
 `pnpm network:lab status`.
 
 ## Final state
 
-TODO: подтверждение, что labelled lab containers, networks и volumes отсутствуют,
+TODO: подтверждение, что контейнеры, сети и volumes с метками лаборатории отсутствуют,
 либо честное описание оставшегося состояния.

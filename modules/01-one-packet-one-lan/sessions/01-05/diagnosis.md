@@ -1,25 +1,39 @@
 # Diagnosis 01-05
 
+Для каждого случая двигайтесь от проверенных входных данных к первой границе,
+которую они больше не подтверждают. Не заполняйте конкретную первопричину вместо
+`Unknowns`.
+
+## Source facts
+
+TODO: перечислите три директории fixture, их проверенные provenance/hash и
+заявленные границы захвата. Сохраните точные ссылки на файлы-источники.
+
+## Assumptions before inspector actions
+
+TODO: перечислите утверждения, которые не даны provenance и ещё не наблюдались.
+Если дополнительных допущений нет, напишите это явно и объясните почему.
+
 ## Expected before inspector actions
 
-TODO: один ISO UTC timestamp до первого `inspect`, expected operational contract и
-assumptions без заранее заполненных диагнозов или target fields. Допустимая форма
-Expected описывает три verified identities, три отдельных network-none runs,
-четыре raw artifacts и clean post-check каждого; protocol events пока unknown.
+TODO: одна отметка ISO UTC до первого `inspect` и прогноз работы инспектора: три
+отдельных запуска с `network=none`, по четыре исходных файла и подтверждённая
+очистка каждого. События протоколов, диагнозы и поля цели пока `Unknown`.
 
 ## Inspector run ledger
 
-TODO: для Case A/B/C — отдельный `.training/evidence/01-05/<run-id>/`,
+TODO: для Case A/B/C — отдельная директория `.training/evidence/01-05/<run-id>/`,
 `inspect_action_at`, `cleanup_at`, ссылки на `preflight.txt`, `events.jsonl`,
-`inspect.txt`, `post-check.txt`, exact cleanup marker и labelled counts `0/0/0`.
-Не подставляйте сюда timestamp synthetic probe из fixture `action.txt`.
+`inspect.txt`, `post-check.txt`, фактическое `exact_container_absent=true` и
+счётчики ресурсов с метками курса `0/0/0`. Не подставляйте сюда время
+искусственной пробы из fixture `action.txt`.
 
 ## Case A — interface-not-ready
 
 ### Verified inputs and observations
 
-TODO: hash/provenance и точные citations на `baseline.txt`, `action.txt` и
-`events.tsv`/bounded empty-capture metadata.
+TODO: hash/provenance и точные ссылки на `baseline.txt`, `action.txt` и
+`events.tsv` либо на metadata, доказывающие границы пустого захвата.
 
 ### Last proven stage
 
@@ -35,19 +49,19 @@ TODO
 
 ### Remaining unknowns
 
-TODO: минимум две.
+TODO: минимум два независимых `Unknowns`.
 
 ### Next discriminating observation
 
-TODO: только предложите bounded read-only evidence, не запускайте новый probe;
-назовите competing hypotheses и разные ожидаемые результаты observation.
+TODO: только предложите ограниченное read-only-наблюдение, не запускайте новую
+пробу; назовите конкурирующие гипотезы и разные ожидаемые результаты наблюдения.
 
 ## Case B — arp-no-reply
 
 ### Verified inputs and observations
 
-TODO: hash/provenance и точные citations на `baseline.txt`, `action.txt` и
-`events.tsv`/bounded empty-capture metadata.
+TODO: hash/provenance и точные ссылки на `baseline.txt`, `action.txt` и
+`events.tsv` либо на metadata, доказывающие границы пустого захвата.
 
 ### Last proven stage
 
@@ -63,7 +77,7 @@ TODO
 
 ### Remaining unknowns
 
-TODO: минимум две.
+TODO: минимум два независимых `Unknowns`.
 
 ### Next discriminating observation
 
@@ -73,8 +87,8 @@ TODO
 
 ### Verified inputs and observations
 
-TODO: hash/provenance и точные citations на `baseline.txt`, `action.txt` и
-`events.tsv`/bounded empty-capture metadata.
+TODO: hash/provenance и точные ссылки на `baseline.txt`, `action.txt` и
+`events.tsv` либо на metadata, доказывающие границы пустого захвата.
 
 ### Last proven stage
 
@@ -90,7 +104,7 @@ TODO
 
 ### Remaining unknowns
 
-TODO: минимум две.
+TODO: минимум два независимых `Unknowns`.
 
 ### Next discriminating observation
 
@@ -98,10 +112,11 @@ TODO
 
 ## Cross-case comparison
 
-TODO: почему одинаковый верхнеуровневый symptom не означает одинаковую causal
-boundary.
+TODO: объясните, почему одинаковый верхнеуровневый симптом не означает одинаковую
+причинную границу.
 
 ## Offline inspector cleanup
 
-TODO: три фактических `exact_container_absent=true` из post-check тех же runs и
-итоговый `pnpm network:lab status`.
+TODO: три фактических `exact_container_absent=true` из `post-check.txt` тех же
+запусков, нулевые счётчики ресурсов с метками курса и итоговый
+`pnpm network:lab status`.

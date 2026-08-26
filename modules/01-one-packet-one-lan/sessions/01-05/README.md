@@ -2,80 +2,93 @@
 
 Время: 50 минут.
 
+До сих пор мы собирали успешный путь: интерфейс поднят, ARP находит соседа, Echo
+Request уходит и Echo Reply возвращается. В реальной диагностике чаще видна только
+последняя строка — например, timeout. Она говорит, что результат не получен, но не
+объясняет, где именно оборвалась цепочка.
+
+Теперь успешный путь станет линейкой для трёх неудачных обменов. Вместо угадывания
+популярной причины вы будете двигаться по доказательствам и останавливаться на
+первом переходе, который данные больше не подтверждают. Это позволяет честно
+сузить область поиска, даже когда точная первопричина пока неизвестна.
+
 ## Результат и границы
 
-Вы проанализируете три immutable synthetic evidence bundle и для каждого укажете:
+Вы проанализируете три неизменяемых искусственных набора доказательств и для
+каждого укажете:
 
-1. последний этап, который подтверждён observed evidence;
+1. последний этап, который подтверждён данными `Observed`;
 2. самый ранний следующий этап, для которого ожидаемое доказательство отсутствует
    или прямо опровергнуто;
-3. что это локализует и что остаётся unknown.
+3. что это локализует и что остаётся `Unknown`.
 
-Исправлять конфигурацию и угадывать root cause не нужно. Scope — только
-предоставленные offline files в `fixtures/01-05/`. Утверждение «сломано потому что
-X» без различающего evidence является ошибкой, даже если X правдоподобен.
+Исправлять конфигурацию и угадывать первопричину не нужно. В область работы входят
+только предоставленные офлайн-файлы в `fixtures/01-05/`. Утверждение «сломано
+потому что X» без различающего доказательства является ошибкой, даже если X
+правдоподобен.
 
-## Причинная лестница локального Echo exchange
+## Причинная лестница локального Echo-обмена
 
-Диагностика начинается не с названия любимой причины, а с первого нарушенного
-контракта в последовательности:
+Диагностика начинается не с любимой причины, а с первого нарушенного контракта в
+последовательности:
 
 ```text
-S0 requested action exists
+S0 запрошенное действие существует
  ↓
-S1 source interface is ready
+S1 интерфейс отправителя готов
  ↓
-S2 neighbor-before is observed as present or absent
- ├─ mapping present ───────────────────────────────┐
- └─ mapping absent → S3a ARP Request observed
+S2 наличие или отсутствие записи neighbor-before наблюдалось
+ ├─ соответствие есть ─────────────────────────────┐
+ └─ соответствия нет → S3a ARP Request наблюдался
                          ↓
-                    S3b matching ARP Reply observed
+                    S3b соответствующий ARP Reply наблюдался
                          ↓                         │
-                    S4 mapping available ←────────┘
+                    S4 соответствие доступно ←─────┘
                          ↓
-       S5 Ethernet/IPv4/ICMP Echo Request observed
+       S5 Ethernet/IPv4/ICMP Echo Request наблюдался
                          ↓
- S6 matching reverse Ethernet/IPv4/ICMP Reply observed
+ S6 соответствующий обратный Ethernet/IPv4/ICMP Reply наблюдался
 ```
 
-Каждый переход имеет собственное evidence. S3a/S3b — только cold/cache-miss
-branch: при уже observed mapping warm path законно идёт от S2 прямо к S4. Если
-mapping absent и после S3a нет S3b, отсутствие ICMP Request ожидаемо и ещё не
-проверяет ICMP handling. Если S5 достигнут, ARP уже не является самой ранней
-границей данного run. S5/S6 требуют назвать вложенные Ethernet, IPv4 и ICMP
-evidence, а не только слово `ping`.
+У каждого перехода есть собственное доказательство. S3a/S3b относятся только к
+cold-ветке с отсутствующей записью в кэше: если соответствие уже наблюдалось,
+warm-путь законно идёт от S2 прямо к S4. Если соответствия нет и после S3a не
+наблюдается S3b, отсутствие ICMP Request ожидаемо и ещё ничего не говорит об
+обработке ICMP. Если достигнут S5, ARP уже не является самой ранней границей этого
+запуска. Для S5/S6 нужно назвать вложенные доказательства Ethernet, IPv4 и ICMP,
+а не только слово `ping`.
 
 S3b и S4 — тоже разные утверждения. Наблюдаемый ARP Reply доказывает содержимое
-frame, но сам по себе не доказывает, что source принял mapping. S4 можно подтвердить
-отдельным neighbor snapshot либо косвенно следующим Ethernet Request, который в
-той же bounded sequence использует рекламированный destination MAC. Если нет ни
-одного такого evidence, граница остаётся между S3b и S4.
+кадра, но сам по себе не доказывает, что source принял соответствие. S4 можно
+подтвердить отдельным снимком кэша соседей либо косвенно следующим Ethernet
+Request, который в той же ограниченной последовательности использует сообщённый
+destination MAC. Если такого доказательства нет, граница остаётся между S3b и S4.
 
-«Нет frame в capture» считается evidence только когда bundle подтверждает capture
-point, interval/filter и requested action. Иначе отсутствие могло возникнуть из-за
-ошибки наблюдения.
+«В захвате нет кадра» считается доказательством, только когда набор подтверждает
+точку захвата, интервал, фильтр и запрошенное действие. Иначе отсутствие могло
+возникнуть из-за ошибки наблюдения.
 
-## Как читать bundle
+## Как читать набор доказательств
 
-Каждая directory содержит:
+Каждая директория содержит:
 
-- `provenance.md` — synthetic inputs, capture point и ограничения;
-- `sha256.txt` — identity raw artifacts;
-- `baseline.txt` — interface/neighbor state до action;
-- `events.tsv` — нормализованные observed events; он производен от raw pcap;
-- `capture.pcap` или явное описание пустого capture;
-- `action.txt` — какой bounded probe был запрошен и когда.
+- `provenance.md` — искусственные входные данные, точку захвата и ограничения;
+- `sha256.txt` — identity исходных файлов;
+- `baseline.txt` — состояние интерфейса и кэша соседей до действия;
+- `events.tsv` — нормализованные события `Observed`, полученные из исходного pcap;
+- `capture.pcap` или явное описание пустого захвата;
+- `action.txt` — какая ограниченная проба была запрошена и когда.
 
 Порядок анализа:
 
 ```text
-verify identity → verify observation window → mark observed stages
-→ find first missing expected transition → state boundary → preserve unknowns
+проверить provenance и hash → проверить окно наблюдения → отметить этапы Observed
+→ найти первый пропущенный ожидаемый переход → назвать границу → сохранить Unknowns
 ```
 
-## Разобранный пример 1: успех до request, дальше unknown
+## Разобранный пример 1: запрос доказан, дальше неизвестно
 
-Synthetic sample, не один из заданных cases:
+Искусственный пример, не один из заданных случаев:
 
 ```text
 baseline: eth0 UP, neighbor .20 -> 02:42:ac:1e:00:14
@@ -85,9 +98,9 @@ events:
 ```
 
 Подтверждены S1, warm-ветка S2, S4 и S5; S3 здесь не требуется. Самая ранняя
-недоказанная граница — S6: reply не
-наблюдался в заявленном window. Это не доказывает, что `beta firewall dropped`:
-возможны обработка на `beta`, обратная отправка, capture loss и другие unknowns.
+недоказанная граница — S6: reply не наблюдался в заявленном окне. Это не
+доказывает, что «firewall на `beta` отбросил пакет»: возможны обработка на `beta`,
+обратная отправка, потеря при захвате и другие `Unknowns`.
 
 ## Разобранный пример 2: почему похожий симптом имеет другую границу
 
@@ -97,62 +110,69 @@ baseline: eth0 state DOWN
 events: none
 ```
 
-Здесь нельзя начинать с «beta не отвечает». S1 прямо опровергнут: source interface
+Здесь нельзя начинать с «beta не отвечает». S1 прямо опровергнут: интерфейс source
 не готов. S2 тоже не наблюдается, но это более позднее следствие. Локализация — на
-границе готовности/эмиссии source; конкретная причина состояния DOWN остаётся
-unknown.
+границе готовности и отправки source; конкретная причина состояния DOWN остаётся
+`Unknown`.
 
-## Micro-example: как выбрать следующий discriminator
+## Короткий пример: как выбрать следующую различающую проверку
 
-Предположим, source capture доказал S5, но не S6. Остались две hypotheses:
+Предположим, захват на source доказал S5, но не S6. Остались две гипотезы:
 
-- H1: matching request не дошёл до destination;
-- H2: request дошёл, но matching reply не был создан.
+- H1: соответствующий Request не дошёл до destination;
+- H2: Request дошёл, но соответствующий Reply не был создан.
 
-Один bounded read-only capture в destination namespace для того же synthetic
-request различает их: при H1 matching ingress Request отсутствует, при H2 он
-присутствует. Такой вывод допустим только при заранее доказанных capture
-point/filter/window и completeness contract; без них отсутствие снова не
-различает hypotheses. В задании новый capture не запускайте — предложите
-аналогичное наблюдение и явно напишите разные ожидаемые результаты для оставшихся
-hypotheses.
+Один ограниченный read-only-захват в destination namespace для того же
+искусственного запроса различает их: при H1 соответствующий входящий Request
+отсутствует, при H2 — присутствует. Такой вывод допустим только при заранее
+доказанных точке, фильтре и окне захвата, а также контракте полноты; без них
+отсутствие снова не различает гипотезы. В задании новый захват не запускайте —
+предложите аналогичное наблюдение и явно напишите разные ожидаемые результаты для
+оставшихся гипотез.
 
-## Три cases задания
+## Три случая задания
 
-| Case | Directory | Наблюдаемый симптом |
+| Случай | Директория | Что заявляет каталог до проверки |
 | --- | --- | --- |
-| A | `fixtures/01-05/interface-not-ready/` | requested action есть, relevant frames не наблюдались; baseline показывает `eth0 DOWN` |
-| B | `fixtures/01-05/arp-no-reply/` | repeated ARP requests, matching reply отсутствует |
-| C | `fixtures/01-05/icmp-no-reply/` | ARP exchange завершён, Echo Request есть, matching Reply отсутствует |
+| A | `fixtures/01-05/interface-not-ready/` | действие запрошено, относящиеся к нему кадры не наблюдались; baseline показывает `eth0 DOWN` |
+| B | `fixtures/01-05/arp-no-reply/` | ARP Request повторяется, соответствующий Reply отсутствует |
+| C | `fixtures/01-05/icmp-no-reply/` | обмен ARP завершён, Echo Request есть, соответствующий Reply отсутствует |
 
-Таблица называет observed shape, но не root cause. Самостоятельная работа —
-доказать границу для каждого case точными ссылками `file:line`/frame number и не
-сделать вывод шире данных.
+Таблица пересказывает заявления версионируемого каталога о содержимом наборов. До
+`inspect` это `Source facts`, а не ваши `Observed`: фактические строки и кадры ещё
+нужно воспроизвести. Если вывод инспектора расходится с каталогом, сохраните
+расхождение и остановитесь. Самостоятельная работа — доказать границу для каждого
+случая точными ссылками `file:line` и номерами кадров, не делая вывод шире данных.
 
 ## Два правдоподобных неверных пути
 
-1. **Во всех трёх cases написать «destination недоступен».** Это пересказ общего
-   symptom, который стирает различающие stages и не помогает выбрать следующую
+1. **Во всех трёх случаях написать «узел назначения недоступен».** Это пересказ общего
+   симптома, который стирает различающие этапы и не помогает выбрать следующую
    проверку.
-2. **Назвать конкретную причину по отсутствующему reply.** Repeated ARP без reply
-   совместим с несколькими причинами: неверный target inventory, link/endpoint
-   issue, filtering или capture limitation. Evidence локализует границу, но не
-   выбирает одну причину без нового теста.
+2. **Назвать конкретную причину по отсутствующему Reply.** Повторяющийся ARP без
+   Reply совместим с несколькими причинами: неверные данные о цели, проблема
+   канала или узла, фильтрация либо ограничение захвата. Доказательства локализуют
+   границу, но не выбирают одну причину без нового теста.
 
 ## Процедура
 
-1. Выполните `pnpm network:fixture preflight`. Продолжайте только после PASS для
-   local `unix://` endpoint и pinned image; при missing image используйте
+1. Выполните `pnpm network:fixture preflight`. Продолжайте только после PASS:
+   Docker endpoint должен быть локальным `unix://`, а закреплённый образ — уже
+   загруженным. Если проверка сообщает только об отсутствующем образе, выполните
    `pnpm network:fixture preload` и повторите preflight.
-2. До первого `inspect` заполните `Expected before inspector actions` в
-   `diagnosis.md`: получите ISO UTC timestamp командой
-   `node -e 'console.log(new Date().toISOString())'` и предскажите только
-   operational contract — три immutable identities, три network-none parser runs
-   и cleanup каждого. Например, допустимо заранее ожидать, что каждый verified
-   bundle даст отдельный run с четырьмя raw artifacts, `network_mode=none` и clean
-   post-check; какие protocol events окажутся внутри, до `inspect` оставьте
-   unknown. Диагнозы и target fields не записывайте до observations.
-3. Для каждого case проверьте hashes/provenance и получите canonical view:
+2. До первого `inspect` заполните в `diagnosis.md` три отдельные секции.
+   В `Source facts` перечислите три версионируемых набора и их provenance/hash.
+   В `Assumptions before inspector actions` оставьте только утверждения, которые
+   ещё не подтверждены этими источниками; если таких нет, обоснуйте это. В
+   `Expected before inspector actions` поставьте ISO UTC timestamp командой
+   `node -e 'console.log(new Date().toISOString())'` и предскажите только работу
+   инспектора: три отдельных офлайн-запуска с `network=none`; каждый должен
+   сохранить `preflight.txt`, `events.jsonl`, `inspect.txt` и `post-check.txt` и
+   подтвердить очистку. Какие события протоколов фактически окажутся внутри,
+   до `inspect` оставьте `Unknown`; диагнозы и поля цели не переносите в
+   `Observations` заранее.
+3. Для каждого случая проверьте hashes/provenance и получите каноническое
+   представление:
 
    ```bash
    pnpm network:fixture verify fixtures/01-05/interface-not-ready
@@ -165,69 +185,77 @@ hypotheses.
    pnpm network:fixture inspect fixtures/01-05/icmp-no-reply
    ```
 
-   Каждый `inspect` создаёт отдельный `.training/evidence/01-05/<run-id>/` с
-   `preflight.txt`, `events.jsonl`, `inspect.txt` и `post-check.txt`.
-4. Заполните `Inspector run ledger`: для A/B/C укажите run path,
-   `inspect_action_at` из текущего inspector `events.jsonl`,
-   `cleanup_at`/marker/counts из `post-check.txt` и все четыре raw references.
-   `inspect_action_at` — время offline parsing action, а не время synthetic Echo
-   probe из fixture `action.txt`. Global Expected timestamp должен быть раньше
-   каждого inspector action.
+   Каждый `inspect` создаёт отдельную директорию
+   `.training/evidence/01-05/<run-id>/` с `preflight.txt`, `events.jsonl`,
+   `inspect.txt` и `post-check.txt`.
+4. Заполните реестр `Inspector run ledger`: для A/B/C укажите путь запуска,
+   `inspect_action_at` из его `events.jsonl`, `cleanup_at`, признак очистки и
+   счётчики из `post-check.txt`, а также ссылки на `preflight.txt`, `events.jsonl`,
+   `inspect.txt` и `post-check.txt`.
+   `inspect_action_at` отмечает чтение fixture инспектором. Это не время
+   искусственной Echo-пробы, записанное в `action.txt` самого набора. Общая отметка
+   `Expected` должна быть раньше каждого из трёх действий инспектора.
 5. В `diagnosis.md` заполните отдельный раздел Case A/B/C:
-   - verified source facts/assumptions;
-   - cited observations: для каждого case обязательны точные ссылки на его
-     `baseline.txt`, `action.txt` и `events.tsv`; используйте `path:line`, а для
-     packet evidence дополнительно frame number и exact fields. Для empty capture
-     сослитесь на bounded metadata, которая доказывает окно и отсутствие records;
-   - last proven stage;
-   - earliest disproven/not-proven transition;
-   - bounded inference;
-   - минимум две remaining unknowns;
-   - один следующий minimum discriminating observation без запуска: назовите
-     competing hypotheses и разные ожидаемые результаты этого observation.
-6. Не меняйте fixtures. Каждый `inspect` запускает exact labelled offline
-   container без network, затем обязан завершиться секцией
-   `exact_container_absent=true`. Перенесите три cleanup post-check в раздел
+   - проверенные `Source facts` и отдельные `Assumptions`;
+   - процитированные `Observations`: для каждого случая обязательны точные ссылки
+     на его `baseline.txt`, `action.txt` и `events.tsv`; используйте `path:line`, а для
+     packet evidence дополнительно укажите номер кадра и точные `field=value`.
+     Для пустого захвата сошлитесь на metadata, где зафиксированы точка, фильтр,
+     начало и конец ограниченного окна и нулевое число записей;
+   - последний доказанный этап (`last proven stage`);
+   - самый ранний опровергнутый или недоказанный переход;
+   - ограниченный `Inference`;
+   - минимум два оставшихся `Unknowns`;
+   - одно следующее минимальное различающее наблюдение без запуска: назовите
+     конкурирующие гипотезы и разные ожидаемые результаты этого наблюдения.
+6. Не меняйте fixtures. Каждый `inspect` запускает точно обозначенный меткой
+   офлайн-контейнер без сети, затем обязан завершиться секцией
+   `exact_container_absent=true`. Перенесите три результата очистки в раздел
    `Offline inspector cleanup` файла `diagnosis.md`.
 
-Если inspect сообщает `Fixture cleanup FAILED`, не продолжайте и не выдавайте
-анализ за DONE. Выполните только напечатанную recovery-команду с exact failed run
-directory; она сверяет сохранённые Docker endpoint, Engine ID, reserved name/role,
-run label и container ID перед удалением, а затем ждёт bounded clean quiescence:
+Если `inspect` сообщает `Fixture cleanup FAILED`, не продолжайте и не выдавайте
+анализ за DONE. Выполните только напечатанную команду восстановления с точной
+директорией неудачного запуска. Перед удалением она сверит Docker endpoint,
+Engine ID, зарезервированные имя и роль, run label и container ID, а после —
+ограниченное время проверит, что чистое состояние сохраняется:
 
 ```bash
 pnpm network:fixture cleanup .training/evidence/01-05/<failed-run-id>
 pnpm network:lab status
 ```
 
-Остановитесь и не делайте диагноз, если hash/provenance не совпал, observation
-window неизвестен или canonical companion расходится с raw artifact.
+Остановитесь и не делайте диагноз, если hash/provenance не совпал, окно
+наблюдения неизвестно или каноническое текстовое представление расходится с
+исходным файлом.
 
-## Проверка и evidence
+## Проверка и доказательства
 
-- Local: `network-evidence` проверяет три case ids, один Expected checkpoint, три
-  unique raw runs с упорядоченными timestamps, обязательные sections/citations,
-  cleanup post-check и отсутствие TODO. Смысл citations и количество независимых
-  unknowns проверяет agent по rubric.
-- Empirical: три run-scoped `inspect.txt` воспроизводят fixture hashes/fields
-  offline; это измерение файлов, не живой сети.
-- Agent: проверяет causal boundary, конкурирующие объяснения и отсутствие
-  недоказанного root cause.
-- Evidence: `diagnosis.md`.
+- Локально: `network-evidence` проверяет три случая, одну отметку `Expected`, три
+  уникальных запуска с исходными данными и упорядоченными timestamps, обязательные
+  секции и ссылки, результаты очистки и отсутствие TODO. Смысл ссылок и
+  независимость `Unknowns` проверяет агент по rubric.
+- Практически: три относящихся к запускам `inspect.txt` воспроизводят hashes/fields
+  fixture офлайн; это измерение файлов, не живой сети.
+- Агент: проверяет причинную границу, конкурирующие объяснения и отсутствие
+  недоказанной первопричины.
+- Доказательство: `diagnosis.md`.
 
 ## DONE
 
-- [ ] Identity/provenance всех трёх bundles проверены.
-- [ ] Expected записан до трёх action markers; run ledger связывает каждый case с
-      preflight/events/inspect/post-check и clean post-state.
-- [ ] Для каждого case названы last proven и earliest missing/disproven stage с
-      точными citations на соответствующие `baseline.txt`, `action.txt` и
-      `events.tsv`/bounded empty-capture metadata.
-- [ ] Root cause не объявлен известным там, где bundle задаёт только boundary.
-- [ ] Для каждого case сохранены unknowns и следующий различающий observation.
-- [ ] Все три offline inspector cleanup post-check сохранены; labelled counts/status
-      чисты.
+- [ ] Source facts и provenance всех трёх наборов проверены; assumptions записаны
+      отдельно или их отсутствие обосновано.
+- [ ] `Expected` записан до трёх отметок действий; реестр связывает каждый случай
+      с `preflight.txt`, `events.jsonl`, `inspect.txt`, `post-check.txt` и чистым
+      конечным состоянием.
+- [ ] Для каждого случая названы последний доказанный и самый ранний
+      отсутствующий либо опровергнутый этап с точными ссылками на соответствующие
+      `baseline.txt`, `action.txt` и `events.tsv` либо на metadata ограниченного
+      пустого захвата.
+- [ ] Первопричина не объявлена известной там, где набор задаёт только границу.
+- [ ] Для каждого случая сохранены `Unknowns` и следующее различающее наблюдение.
+- [ ] Все три post-check офлайн-инспектора сохранены; счётчики ресурсов с метками
+      курса и итоговый status чисты.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.
 
-Следующий шаг `01-06` даст новый bundle без заранее названного symptom shape и
-попросит собрать весь локальный packet path.
+Следующий шаг `01-06` даст новый набор без заранее названной формы симптома и
+попросит собрать весь локальный путь пакета.

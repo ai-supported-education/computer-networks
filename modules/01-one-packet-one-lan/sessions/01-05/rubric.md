@@ -2,7 +2,9 @@
 
 ## Invariants для PASS
 
-- Expected operational contract записан до всех трёх inspector action markers;
+- Source facts процитированы из трёх versioned fixture bundles, assumptions
+  отделены от них и от observations либо их отсутствие обосновано.
+- Expected для работы инспектора записан до всех трёх action markers;
   ledger содержит три unique preflight/events/inspect/post-check runs с
   упорядоченными timestamps и clean labelled counts.
 - Все три bundles идентифицированы verified hash/provenance.

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -7,6 +7,21 @@ import { validateNetworkEvidence } from "../src/evidence.js";
 const repository = path.resolve(import.meta.dirname, "../../..");
 
 describe("network evidence artifact contract", () => {
+  it("keeps the target Echo pairs out of the 01-06 learner starter", async () => {
+    const sessionDirectory = path.join(
+      repository,
+      "modules/01-one-packet-one-lan/sessions/01-06"
+    );
+    const learnerText = [
+      await readFile(path.join(sessionDirectory, "README.md"), "utf8"),
+      await readFile(path.join(sessionDirectory, "packet-path.md"), "utf8")
+    ].join("\n");
+
+    expect(learnerText).not.toMatch(/echo_frame\s*=\s*[3-6]/i);
+    expect(learnerText).not.toMatch(/(?:3\s*[→-]\s*4|5\s*[→-]\s*6)/);
+    expect(learnerText).toContain("echo_frame=<observed frame number>");
+  });
+
   it("fails every real TODO starter from 01-02 through 01-06", async () => {
     for (const sessionId of ["01-02", "01-03", "01-04", "01-05", "01-06"]) {
       const result = await validateNetworkEvidence(
@@ -51,6 +66,26 @@ describe("network evidence artifact contract", () => {
         "network-evidence PASS: evidence/baseline.md, evidence/post-check.md"
       ]
     });
+
+    await writeFile(
+      path.join(root, "evidence", "baseline.md"),
+      baseline("Expected was recorded at 2026-08-23T00:00:00Z before up.")
+        .replace("## Source facts", "## Unlabelled inputs")
+    );
+    const missingSourceFacts = await validateNetworkEvidence(root, "01-02");
+    expect(missingSourceFacts.ok).toBe(false);
+    expect(missingSourceFacts.messages.join("\n")).toContain("source facts");
+
+    await writeFile(
+      path.join(root, "evidence", "baseline.md"),
+      baseline("Expected was recorded at 2026-08-23T00:00:00Z before up.")
+        .replace("## Assumptions before action", "## Unlabelled beliefs")
+    );
+    const missingAssumptions = await validateNetworkEvidence(root, "01-02");
+    expect(missingAssumptions.ok).toBe(false);
+    expect(missingAssumptions.messages.join("\n")).toContain(
+      "assumptions before action"
+    );
 
     await writeFile(
       path.join(root, "evidence", "post-check.md"),
@@ -112,6 +147,34 @@ describe("network evidence artifact contract", () => {
     await writeFile(path.join(root, file), markdown);
     const result = await validateNetworkEvidence(root, sessionId, repository);
     expect(result, result.messages.join("\n")).toMatchObject({ ok: true });
+  });
+
+  it("requires source facts and assumptions in 01-03", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "network-evidence-"));
+    await writeFile(
+      path.join(root, "frame-map.md"),
+      completedFrameMap().replace("## Source facts", "## Unlabelled inputs")
+    );
+    const missingFacts = await validateNetworkEvidence(root, "01-03", repository);
+    expect(missingFacts.ok).toBe(false);
+    expect(missingFacts.messages.join("\n")).toContain("source facts");
+
+    await writeFile(
+      path.join(root, "frame-map.md"),
+      completedFrameMap().replace(
+        "## Assumptions before action",
+        "## Unlabelled beliefs"
+      )
+    );
+    const missingAssumptions = await validateNetworkEvidence(
+      root,
+      "01-03",
+      repository
+    );
+    expect(missingAssumptions.ok).toBe(false);
+    expect(missingAssumptions.messages.join("\n")).toContain(
+      "assumptions before action"
+    );
   });
 
   it("rejects mixed or misordered offline fixture evidence runs", async () => {
@@ -303,6 +366,12 @@ describe("network evidence artifact contract", () => {
 function baseline(expected: string, runId = "run-a"): string {
   return `# Baseline
 
+## Source facts
+The versioned lab contract supplies the exact names, addresses and image identity.
+
+## Assumptions before action
+No additional assumptions: preflight and raw observations verify the relevant state.
+
 ## Expected before action
 ${expected}
 
@@ -351,6 +420,12 @@ All course-labelled resources are absent after cleanup.
 function completedFrameMap(): string {
   return `# Frame map
 
+## Source facts
+Versioned provenance supplies the fixture path, canonical hash and two-frame count.
+
+## Assumptions before action
+No additional assumptions: provenance and the bounded inspector verify required inputs.
+
 ## Expected before action
 Expected fixture identity and two bounded records were written at 2026-08-23T00:00:00Z before inspect.
 
@@ -386,6 +461,12 @@ Cleanup completed at 2026-08-23T00:02:00Z; exact_container_absent=true; labelled
 
 function completedComparison(): string {
   return `# Comparison
+
+## Source facts
+RFC 826 and the versioned lab inventory supply the ARP format and fixed addresses.
+
+## Assumptions before action
+The chapter assumes both fixed endpoints are in one LAN; CIDR proof is deferred.
 
 ## Expected before action
 Predictions were recorded at 2026-08-23T00:00:00Z before either bounded action started.
@@ -444,6 +525,8 @@ A bounded read-only observation is proposed without running another probe.
 `;
   return (
     "# Diagnosis\n\n" +
+    "## Source facts\nThree versioned fixture bundles supply provenance, hashes and capture bounds.\n\n" +
+    "## Assumptions before inspector actions\nNo additional assumptions are needed before the offline inspections.\n\n" +
     "## Expected before inspector actions\nExpected bounded offline parsing was recorded at 2026-08-23T00:00:00Z before all inspect actions.\n\n" +
     "## Inspector run ledger\n" +
     "- Case A inspect_action_at=2026-08-23T00:01:00Z cleanup_at=2026-08-23T00:01:10Z labelled=0/0/0 .training/evidence/01-05/run-a/preflight.txt .training/evidence/01-05/run-a/events.jsonl .training/evidence/01-05/run-a/inspect.txt .training/evidence/01-05/run-a/post-check.txt\n" +

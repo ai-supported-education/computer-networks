@@ -1,27 +1,53 @@
-# 01-02 — Доказать baseline изолированной LAN
+# 01-02 — Подтвердить исходное состояние изолированной LAN
 
 Время: 45 минут.
 
+В `01-01` адреса и поля были даны в готовом примере. Но схема на бумаге ещё не
+доказывает, что два узла действительно запущены, их интерфейсы подняты, а адреса
+совпадают с ожидаемыми. Перед любым сетевым экспериментом нужен исходный снимок,
+к которому можно будет вернуться после изменения.
+
+Сейчас вы впервые поднимете учебную LAN и сами соберёте такой снимок. Здесь важен
+не сам факт «контейнеры запущены», а цепочка проверок: сначала убедиться, что
+выбран локальный Docker и имена лаборатории свободны, затем увидеть состояние
+`eth0`, его MAC- и IPv4-адреса и в конце подтвердить удаление ресурсов. Именно
+такой исходный снимок, подтверждённый наблюдениями, дальше будем называть baseline.
+
 ## Результат и разрешённый scope
 
-Вы поднимете два disposable Linux endpoint — `cn-alpha` и `cn-beta` — только в
-Docker network этой лаборатории. Затем сохраните наблюдаемые interface, MAC, IPv4
-и link state и полностью удалите topology.
+Вы поднимете два временных Linux-узла — `cn-alpha` и `cn-beta` — только в сети
+Docker этой лаборатории. Затем сохраните наблюдаемые интерфейс, MAC, IPv4 и
+состояние канала, после чего полностью удалите топологию.
 
 Разрешены только ресурсы, которые создаёт `pnpm network:lab up 01-02`. У них есть
-course labels и точные имена. Не подключайте лабораторию к рабочим Compose
-проектам, не добавляйте published ports, host networking, Docker socket или
-произвольные Internet targets.
+метки курса и точные имена. Не подключайте лабораторию к рабочим проектам
+Compose, не добавляйте опубликованные порты, host networking, Docker socket или
+произвольные адреса в интернете.
 
-Значения `172.30.0.10` и `172.30.0.20` — заданный inventory. Почему эти адреса
-относятся к одной сети и что означает prefix, будет выведено в главе 02.
+Значения `172.30.0.10` и `172.30.0.20` — заданные исходные данные. Почему эти
+адреса относятся к одной сети и что означает префикс, будет выведено в главе 02.
 
-## До запуска: expected
+## Исходные факты, допущения и прогноз
+
+До запуска разведите три разных вида утверждений в `evidence/baseline.md`:
+
+- **Source facts** — значения, которые уже заданы версионируемым контрактом
+  лаборатории: имена ресурсов, адреса, разрешённая область и закреплённый образ.
+  Имена и адреса возьмите из `curriculum/lab-environment.md`, а точную ссылку на
+  образ — из `packages/network-lab/src/constants.ts`. Локальный image ID появится
+  позже как результат preflight и не является заранее заданным фактом.
+- **Assumptions** — то, что вы пока принимаете без доказательства. Не дублируйте
+  здесь прогноз. Если дополнительных допущений нет, напишите это явно и объясните,
+  какими последующими проверками заменена вера «на слово».
+- **Expected** — ваш проверяемый прогноз состояния после запуска и после очистки.
+  Он должен быть записан до первого изменения Docker.
+
+## До запуска: что ожидается
 
 Запишите прогноз и текущий UTC timestamp в `evidence/baseline.md` до `up`.
-Все timestamps в evidence имеют ISO 8601 UTC-форму
-`YYYY-MM-DDTHH:mm:ss.sssZ`, например `2026-08-23T05:40:12.345Z`. Portable способ
-получить timestamp для Expected в этой Node.js repository:
+Все отметки времени в доказательствах имеют форму ISO 8601 UTC
+`YYYY-MM-DDTHH:mm:ss.sssZ`, например `2026-08-23T05:40:12.345Z`. Переносимый
+способ получить отметку времени для `Expected` в этом Node.js-репозитории:
 
 ```bash
 node -e 'console.log(new Date().toISOString())'
@@ -29,55 +55,60 @@ node -e 'console.log(new Date().toISOString())'
 
 Скопируйте строку сразу в Expected, а затем запишите прогноз:
 
-- появятся ровно два lab endpoints;
+- появятся ровно два узла лаборатории;
 - у каждого будет `eth0` в состоянии `UP/LOWER_UP`;
 - `alpha` получит MAC `02:42:ac:1e:00:0a` и IPv4 `172.30.0.10`;
 - `beta` получит MAC `02:42:ac:1e:00:14` и IPv4 `172.30.0.20`;
-- topology не опубликует host ports и не получит обычный gateway path наружу;
-- после `down` lab containers и network отсутствуют.
+- топология не опубликует порты хоста и не получит обычный путь наружу через
+  gateway;
+- после `down` контейнеры, сеть и временные volumes лаборатории отсутствуют.
 
-Это expected, а не уже выполненное наблюдение.
+Это ожидание, а не уже выполненное наблюдение.
 
 ## Почему baseline состоит из нескольких доказательств
 
 Строка «container running» отвечает только на вопрос о процессе контейнера. Она не
-доказывает, что нужный interface существует, имеет ожидаемые addresses или
-работает на link. И наоборот, запись адреса в конфигурации ещё не доказывает
-наблюдаемое runtime state.
+доказывает, что нужный интерфейс существует, имеет ожидаемые адреса или работает
+на канальном уровне. И наоборот, запись адреса в конфигурации ещё не доказывает
+его фактическое состояние во время запуска.
 
 ```text
-expected recorded with timestamp
-      ↓ run-scoped preflight proves initial labelled counts are zero
-declared topology
-      ↓ exact action marker, then Docker creates resources
-container running
-      ↓ inspect inside its Linux network namespace
-eth0 exists → link is up → MAC observed → IPv4 observed
-      ↓ exact cleanup
-no labelled lab resources remain
+ожидание записано с отметкой времени
+      ↓ предварительная проверка показывает: ресурсов с метками курса нет
+топология описана
+      ↓ действие отмечено, затем Docker создаёт ресурсы
+контейнер запущен
+      ↓ проверка внутри его сетевого пространства Linux
+eth0 существует → канал поднят → MAC наблюдается → IPv4 наблюдается
+      ↓ точное удаление ресурсов
+ресурсов с метками лаборатории не осталось
 ```
 
-Поэтому baseline сопоставляет source fact (контракт topology) с observed output
-команд внутри каждого endpoint. Вывод «лаборатория готова к следующему bounded
-probe» допустим только после обоих наборов evidence.
+Поэтому baseline сопоставляет факты из контракта топологии с фактическим выводом
+команд внутри каждого узла. Допущения остаются отдельными: наблюдение либо
+подтверждает их, либо оставляет неизвестными. Заключить, что лаборатория готова к
+следующей ограниченной пробе, можно только после этих проверок.
 
-### Разобранный пример 1: interface есть, адрес не доказан
+### Разобранный пример 1: интерфейс есть, адрес не доказан
 
 ```text
 2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500
     link/ether 02:42:ac:1e:00:0a
 ```
 
-Observed: `eth0` существует, flags сообщают admin/link state, MAC виден. В строках
-нет `inet 172.30.0.10`, поэтому IPv4 configuration остаётся unknown. Нельзя
-дописать expected address в раздел observed только потому, что он указан в
-declaration topology.
+Наблюдение: `eth0` существует, флаги сообщают административное и канальное
+состояние, MAC виден. В строках нет `inet 172.30.0.10`, поэтому конфигурация IPv4
+остаётся неизвестной. Нельзя дописать ожидаемый адрес в раздел наблюдений только
+потому, что он указан в описании топологии.
 
-В этой карточке `UP` означает, что interface административно включён, а
-`LOWER_UP` — что virtual link layer сообщает доступный нижний уровень/peer. Эти
-flags не доказывают IPv4 address и не доказывают передачу packet.
+В этой карточке `UP` означает, что интерфейс административно включён, а
+`LOWER_UP` — что драйвер сообщает о работоспособном нижележащем канальном объекте.
+В Docker такой интерфейс обычно является одной стороной связанной виртуальной
+пары Ethernet (`veth`). `LOWER_UP` описывает состояние этой канальной связи, а не
+доказывает личность конкретного соседа, запись ARP или сетевую достижимость. Оба
+флага также не доказывают наличие IPv4-адреса или передачу пакета.
 
-### Разобранный пример 2: cleanup проверен отдельно
+### Разобранный пример 2: удаление ресурсов проверено отдельно
 
 ```text
 containers: 0
@@ -86,10 +117,11 @@ volumes: 0
 ```
 
 Если эти числа получены командой `network:lab status` после `down` и относятся к
-course labels, они подтверждают post-condition лаборатории. Простой успешный exit
-code cleanup-команды слабее: она могла ничего не найти или работать с другим run.
+меткам курса, они подтверждают конечное состояние лаборатории. Один лишь успешный
+код завершения команды очистки слабее: она могла ничего не найти или относиться к
+другому запуску.
 
-## Preflight и stop conditions
+## Предварительная проверка и условия остановки
 
 1. Убедитесь, что предыдущая попытка завершена:
 
@@ -97,9 +129,10 @@ code cleanup-команды слабее: она могла ничего не н
    pnpm network:lab status
    ```
 
-2. Проверьте effective Docker context/endpoint, Engine ID, server architecture,
-   pinned image, поддержку isolated gateway mode, fixed subnet, свободное место и
-   отсутствие конфликтующих exact resources:
+2. Проверьте фактически выбранные Docker context и endpoint, Engine ID,
+   архитектуру сервера, закреплённый образ, поддержку isolated gateway mode,
+   фиксированную подсеть, свободное место и отсутствие ресурсов с конфликтующими
+   точными именами:
 
    ```bash
    pnpm network:lab preflight
@@ -112,124 +145,144 @@ code cleanup-команды слабее: она могла ничего не н
    pnpm network:lab preload
    ```
 
-   Это единственный шаг карточки, которому нужен registry access. Затем обязательно
-   повторите `pnpm network:lab preflight` и продолжайте только после PASS. Все lab
-   runs используют локальный image с `--pull never`. Загруженный pinned image —
-   общий prerequisite курса вне run-scoped topology: `down` намеренно не удаляет
-   его и учащемуся не нужно удалять image вручную.
+   Это единственный шаг карточки, которому нужен доступ к registry. Затем
+   обязательно повторите `pnpm network:lab preflight` и продолжайте только после
+   PASS. Все запуски лаборатории используют локальный образ с `--pull never`.
+   Загруженный закреплённый образ — общее предварительное условие курса вне
+   топологии конкретного запуска: `down` намеренно не удаляет его, и удалять образ
+   вручную не нужно.
 
-Кроме явно описанной ветки missing image, остановитесь, если preflight не PASS,
-endpoint не является local absolute `unix://` socket, Engine ID меняется между
-фазами, Engine rootless, fixed
-`172.30.0.0/24` пересекается с existing Docker network, обнаружен неожиданный
-resource с тем же именем, Docker сообщает неподдерживаемый gateway mode или
-команда предлагает другие targets. При subnet conflict не удаляйте чужую сеть:
-используйте другой local учебный daemon или запросите поддержку курса. Не обходите
-guardrails ручным `docker run --privileged`.
+Кроме явно описанного случая с отсутствующим образом, остановитесь, если
+предварительная проверка не получила PASS, endpoint не является локальным
+абсолютным сокетом `unix://`, Engine ID меняется между этапами, Engine работает в
+rootless-режиме, фиксированная сеть `172.30.0.0/24` пересекается с существующей
+сетью Docker, найден неожиданный ресурс с тем же именем, Docker не поддерживает
+нужный gateway mode или команда предлагает другие цели. При конфликте подсетей не
+удаляйте чужую сеть: используйте другой локальный учебный daemon или запросите
+поддержку курса. Не обходите защитные ограничения ручным `docker run --privileged`.
 
 ## Процедура
 
-1. В `evidence/baseline.md` замените TODO в секции Expected до первого изменения.
-2. Поднимите topology:
+1. В `evidence/baseline.md` заполните `Source facts`, `Assumptions before action`
+   и `Expected before action` до первого изменения. Отметка времени обязательна
+   только для `Expected`.
+2. Поднимите топологию:
 
    ```bash
    pnpm network:lab up 01-02
    ```
 
-   `up` повторяет preflight непосредственно перед действием и сохраняет связанный
-   с unique run файл `preflight.json`: effective local context/endpoint и Engine
-   ID, Engine/server architecture, pinned image ID, checked network inventory с
-   `networkInventory.conflictCount=0`, owner label, exact target names и initial
-   labelled counts `containers=0`, `networks=0`, `volumes=0`. Затем `events.jsonl`
-   фиксирует отдельный action start marker. Для секции Action start скопируйте
-   поле `at` из первой записи с `phase="up"` и `kind="action"`; runner уже пишет
-   его в том же ISO UTC формате.
+   `up` повторяет предварительную проверку непосредственно перед действием и
+   сохраняет связанный с уникальным запуском файл `preflight.json`: фактически
+   выбранные локальные context/endpoint и Engine ID, архитектуру Engine/server,
+   ID закреплённого образа, проверенный список сетей с
+   `networkInventory.conflictCount=0`, owner label, точные имена ресурсов и
+   начальные счётчики с метками `containers=0`, `networks=0`, `volumes=0`. Затем
+   `events.jsonl` фиксирует отдельную отметку начала действия. Для секции Action
+   start скопируйте поле `at` из первой записи с `phase="up"` и `kind="action"`;
+   тренажёр уже пишет его в том же формате ISO UTC.
 
-3. Снимите baseline. Команда печатает выполняемые Linux-команды и добавляет raw
-   output в новый run directory; она не переиспользует существующий raw artifact:
+3. Снимите исходное состояние. Команда печатает выполняемые Linux-команды и
+   добавляет исходный вывод в новую директорию запуска; существующие данные она
+   не переиспользует:
 
    ```bash
    pnpm network:lab baseline
    ```
 
-   В успешном run появятся `topology-inspect.json` с normalized Docker isolation,
-   exact labels, capabilities, `no-new-privileges`, read-only rootfs, bounded
-   tmpfs/CPU/memory/PIDs, mounts/ports и exact endpoints и `baseline.txt` с Linux
-   interface evidence.
-4. Перенесите только существенные observed values и точные ссылки на
+   В успешном запуске `topology-inspect.json` отвечает на три группы вопросов:
+
+   - та ли это сеть и те ли узлы — по точным именам, ID и меткам;
+   - изолирована ли топология — по internal mode, отсутствию опубликованных портов
+     и mounts;
+   - ограничены ли процессы — по capabilities, `no-new-privileges`, read-only
+     rootfs и лимитам tmpfs/CPU/memory/PIDs.
+
+   Отдельный `baseline.txt` содержит данные об интерфейсах Linux.
+4. Перенесите только существенные наблюдаемые значения и точные ссылки на
    `preflight.json`, `events.jsonl`, `topology-inspect.json` и `baseline.txt` одного
-   run в `evidence/baseline.md`. Отдельно напишите ограниченный inference.
-5. Выполните cleanup и сохраните результат post-check:
+   запуска в `evidence/baseline.md`. Отдельно напишите ограниченный вывод.
+5. Удалите ресурсы и сохраните результат итоговой проверки:
 
    ```bash
    pnpm network:lab down
    pnpm network:lab status
    ```
 
-   `down` использует заранее сохранённые name/role reservations, сверяет
-   name/ID/owner/run/role на исходном Engine и ждёт bounded clean quiescence после
-   удаления. Это позволяет повторному `down` восстановить run даже после CLI
-   timeout между daemon-side create и возвратом ID. Затем команда сохраняет
-   `post-check.txt` в той же run directory до удаления active state. Заполните
-   `evidence/post-check.md` ссылкой на этот raw файл и фактическими
-   counts. Для Cleanup action скопируйте поле `at` записи `phase="cleanup"`,
+   `down` использует заранее сохранённые имена и роли, сверяет
+   name/ID/owner/run/role на исходном Engine и ждёт ограниченное время, пока после
+   удаления не установится чистое состояние. Благодаря этому повторный `down`
+   может восстановить запуск даже после timeout CLI между созданием ресурса на
+   стороне daemon и возвратом ID. Затем команда сохраняет `post-check.txt` в той
+   же директории запуска до удаления активного состояния. Заполните
+   `evidence/post-check.md` ссылкой на этот исходный файл и фактическими
+   счётчиками. Для Cleanup action скопируйте поле `at` записи `phase="cleanup"`,
    `kind="cleanup"` из `events.jsonl`; отдельно перенесите `checked_at` из
    `post-check.txt` как время наблюдения конечного состояния. Последующий `status`
-   — независимая видимая перепроверка, но не замена raw post-check.
+   — независимая видимая перепроверка, но не замена исходного post-check.
 
-### Если runtime baseline не совпал
+### Если фактическое исходное состояние не совпало
 
-Не переходите к дальнейшим действиям и не исправляйте raw output под expected.
-`network:lab baseline` при ошибке записывает её в unique run и сам пытается
-выполнить exact cleanup. Если вы заметили discrepancy отдельно, выполните только
-`pnpm network:lab down`, затем `pnpm network:lab status`.
+Не переходите к дальнейшим действиям и не исправляйте исходный вывод под
+ожидание. `network:lab baseline` при ошибке записывает её в уникальный запуск и
+сам пытается удалить только его ресурсы. Если вы заметили расхождение отдельно,
+выполните только `pnpm network:lab down`, затем `pnpm network:lab status`.
 
-Сохраните failed run directory и перечислите её bare run id и причину в секции
-`Failed attempts` файла `evidence/baseline.md`. Полные raw paths во всех остальных
-секциях должны ссылаться только на один canonical successful run: так checker не
-спутает его с предыдущими попытками. Новый запуск получает другой run id и не
-перезаписывает failed evidence. Если cleanup/post-check не PASS, runner сохраняет
-active state; не удаляйте чужие resources вручную, повторите только scoped `down`
-на том же endpoint и Engine ID или остановитесь и передайте evidence на review.
+Сохраните директорию неудачного запуска и перечислите в секции `Failed attempts`
+файла `evidence/baseline.md` только её run id — последний компонент пути после
+`01-02/`, например `2026-08-26T07-10-20-123Z-a1b2c3d4`, — и причину. Полные пути к исходным
+данным во всех остальных секциях должны ссылаться только на один выбранный
+успешный запуск: так проверка не спутает его с предыдущими попытками. Новый запуск
+получает другой run id и не перезаписывает доказательства неудачи. Если
+cleanup/post-check не PASS, тренажёр сохраняет активное состояние; не удаляйте
+чужие ресурсы вручную, повторите только ограниченный `down` на том же endpoint и
+Engine ID или остановитесь и передайте доказательства на проверку.
 
 ## Два правдоподобных неверных пути
 
-1. **Использовать только `docker ps` как baseline.** Это проверяет container
-   lifecycle, но не interface/MAC/IPv4/link state внутри его network namespace.
-2. **Оставить topology ради следующей карточки.** Тогда текущая сессия не
-   green-to-green, а следующая попытка не отличит свой baseline от старого
-   состояния. Cleanup — часть результата, а не необязательный хвост.
+1. **Использовать только `docker ps` как baseline.** Это проверяет жизненный цикл
+   контейнера, но не интерфейс, MAC, IPv4 и состояние канала внутри его сетевого
+   пространства имён.
+2. **Оставить топологию ради следующей карточки.** Тогда текущая карточка не
+   вернётся в чистое состояние, а следующая попытка не отличит своё исходное
+   состояние от старого. Удаление ресурсов — часть результата, а не необязательный
+   хвост.
 
-## Проверка и evidence
+## Проверка и доказательства
 
-- Local: `pnpm session:check` запускает `network-evidence` и проверяет headings,
-  отсутствие TODO, обязательные raw filenames, порядок expected/action/cleanup
-  timestamps, единый run id, initial/final zero counts и isolation/exposure summary.
-  Точная acceptance matrix приведена в consistency-only `acceptance.md`; check не
-  утверждает истинность произвольного вписанного значения.
-- Empirical: raw preflight, action marker, topology inspect, Linux baseline и
-  post-check реально получены указанными lab-командами.
-- Agent: сверяет значения с raw evidence, порядок expected → action → observed,
-  границы scope и cleanup.
-- Evidence: `evidence/baseline.md`, `evidence/post-check.md` и локальные ссылки на
-  один exact `.training/evidence/01-02/<run-id>/`. Raw logs не нужно коммитить.
+- Локально: `pnpm session:check` запускает `network-evidence` и проверяет заголовки,
+  отсутствие TODO, обязательные имена исходных файлов, порядок отметок времени
+  `Expected`/action/cleanup, единый run id, начальные и конечные нулевые счётчики и
+  сводку изоляции и отсутствия внешних точек входа. Проверка формы не утверждает
+  истинность произвольного вписанного значения.
+- Практически: исходные preflight, action marker, topology inspect, Linux baseline
+  и post-check действительно получены указанными командами лаборатории.
+- Агент: сверяет значения с исходными доказательствами, порядок `Expected` →
+  action → `Observed`, границы scope и cleanup.
+- Доказательства: `evidence/baseline.md`, `evidence/post-check.md` и локальные
+  ссылки на один точный `.training/evidence/01-02/<run-id>/`. Исходные журналы не
+  нужно коммитить.
 
 ## DONE
 
-- [ ] Expected timestamp раньше raw action marker; saved preflight показывает
-      local `unix://` endpoint + Engine ID, `networkInventory.conflictCount=0`, initial
-      labelled counts `0/0/0` для containers/networks/volumes, exact scope,
-      Engine/architecture и image.
-- [ ] `topology-inspect.json` доказывает internal isolated network, exact endpoints,
-      отсутствие published ports/mounts/added endpoint capabilities и exact
-      runtime security/resource guardrails.
-- [ ] Observed interface, MAC, IPv4 и link state для обоих endpoints сохранены со
-      ссылкой на raw output.
-- [ ] Source facts, observed и inference не смешаны.
-- [ ] `down` выполнен; raw `post-check.txt` того же run содержит bounded
-      reconciliation/quiescence evidence, а независимый status
-      показывают ноль lab containers, networks и volumes.
+- [ ] Отметка `Expected` предшествует исходной action marker; сохранённый preflight
+      показывает локальный `unix://` endpoint, Engine ID,
+      `networkInventory.conflictCount=0`, начальные labelled counts `0/0/0` для
+      containers/networks/volumes, точную область, Engine/architecture и image.
+- [ ] `topology-inspect.json` доказывает внутреннюю изолированную сеть и точные
+      endpoints. В снимке отдельно видны `published_ports=0`, отсутствие mounts и
+      добавленных capabilities, а также заданные ограничения безопасности и
+      ресурсов процесса.
+- [ ] `Observed` для интерфейса, MAC, IPv4 и состояния канала обоих узлов сохранены
+      со ссылкой на исходный вывод.
+- [ ] Source facts, assumptions, Expected, Observed, Inference и Unknowns не
+      смешаны; для исходных фактов указаны источники.
+- [ ] `down` выполнен; исходный `post-check.txt` того же запуска показывает, что
+      ограниченное ожидание завершилось устойчивым чистым состоянием (поля
+      `reconciliation_quiet_ms`, `reconciliation_observations` и
+      `reconciliation_removals`), а независимый status показывает ноль containers,
+      networks и volumes лаборатории.
 - [ ] `pnpm session:check` зелёный, agent review получил PASS.
 
-Следующий шаг `01-03` использует уже готовый synthetic capture и не требует
-оставлять эту topology запущенной.
+Следующий шаг `01-03` использует уже готовый искусственный захват и не требует
+оставлять эту топологию запущенной.

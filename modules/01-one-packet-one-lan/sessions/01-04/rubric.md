@@ -2,6 +2,8 @@
 
 ## Invariants для PASS
 
+- Source facts имеют ссылки на RFC и versioned lab inventory; assumption об одной
+  LAN записано отдельно и не выдано за вычисленный факт или observation.
 - Expected cold/warm и start marker позволяют доказать правильный порядок фаз.
 - Capture target/interface/time/frame bounds совпадают с разрешённым scope.
 - Cold и warm имеют отдельные raw artifacts, hashes/normalized companions и
@@ -15,6 +17,9 @@
   абсолютным доказательством без проверки capture point.
 - Variable fields (timestamps, identifiers, checksums/IP ID) не используются как
   фиксированный acceptance oracle.
+- Runtime snapshots подтверждают точный mount contract: у каждого capture-helper
+  ровно один labelled volume текущей фазы в `/evidence`, у probe- и
+  neighbor-helper mounts отсутствуют; host bind mounts запрещены.
 - Initial preflight и final raw post-check относятся к тому же run; preflight
   подтверждает local `unix://` endpoint и `networkInventory.conflictCount=0`, а
   lifecycle — переход `0/0/0 → bounded topology → 0/0/0` для
